@@ -1,0 +1,601 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Tenancy & identity ----------
+
+model Practice {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  fax       String?
+  address   String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+
+  users            User[]
+  patients         Patient[]
+  appointments     Appointment[]
+  encounters       Encounter[]
+  prescriptions    Prescription[]
+  examTemplates    ExamTemplate[]
+  reportTemplates  ReportTemplate[]
+  orders           OpticalOrder[]
+  inventoryItems   InventoryItem[]
+  recalls          Recall[]
+  tasks            Task[]
+  auditEvents      AuditEvent[]
+  appointmentTypes AppointmentType[]
+  acceptedPayers   AcceptedPayer[]
+}
+
+enum Role {
+  DOCTOR
+  TECHNICIAN
+  OPTICIAN
+  RECEPTIONIST
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(uuid())
+  practiceId    String
+  practice      Practice @relation(fields: [practiceId], references: [id])
+  entraObjectId String?  @unique // Microsoft Entra ID subject; null until linked
+  email         String   @unique
+  passwordHash  String? // dev/local fallback only; production uses Entra ID
+  firstName     String
+  lastName      String
+  role          Role
+  licenseNumber String? // doctors
+  npi           String? // doctors
+  isActive      Boolean  @default(true)
+  // UI/accessibility preferences (theme, font scale, exam layout, etc.). Not PHI.
+  preferences   Json?
+  createdAt     DateTime @default(now())
+
+  signedEncounters Encounter[]    @relation("SignedBy")
+  prescriptions    Prescription[]
+  addenda          Addendum[]
+  auditEvents      AuditEvent[]
+  appointments     Appointment[]  @relation("Provider")
+  tasksAssigned    Task[]         @relation("Assignee")
+}
+
+// ---------- Patient chart ----------
+
+enum Sex {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum PatientTag {
+  ORTHO_K
+  MYOPIA_MANAGEMENT
+  SPECIALTY_CL
+  DRY_EYE
+  VISION_THERAPY
+  LOW_VISION
+}
+
+model Patient {
+  id         String    @id @default(uuid())
+  practiceId String
+  practice   Practice  @relation(fields: [practiceId], references: [id])
+  mrn        String // human-friendly chart number, unique per practice
+  firstName  String
+  lastName   String
+  dateOfBirth DateTime
+  sex        Sex       @default(UNKNOWN)
+  email      String?
+  phone      String?
+  address    String?
+  city       String?
+  state      String?
+  zip        String?
+  preferredContact String? // phone | email | sms
+  guardianName     String?
+  guardianPhone    String?
+  alerts     String? // allergies to drops, mobility needs, etc.
+  notes      String?
+  tags       PatientTag[] @default([])
+  consentSignedAt  DateTime?
+  isActive   Boolean   @default(true)
+  mergedIntoId String? // set when this chart was merged into another
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  histories     PatientHistory[]
+  insurances    InsurancePolicy[]
+  appointments  Appointment[]
+  encounters    Encounter[]
+  prescriptions Prescription[]
+  documents     Document[]
+  orders        OpticalOrder[]
+  recalls       Recall[]
+
+  @@unique([practiceId, mrn])
+  @@index([practiceId, lastName, firstName])
+  @@index([practiceId, dateOfBirth])
+}
+
+enum HistoryKind {
+  MEDICAL
+  OCULAR
+  FAMILY
+  MEDICATION
+  ALLERGY
+  DIAGNOSIS
+}
+
+model PatientHistory {
+  id        String      @id @default(uuid())
+  patientId String
+  patient   Patient     @relation(fields: [patientId], references: [id])
+  kind      HistoryKind
+  code      String? // ICD-10 for diagnoses, RxNorm for meds when known
+  label     String
+  detail    String?
+  onsetDate DateTime?
+  resolved  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  @@index([patientId, kind])
+}
+
+// ---------- Insurance (records only; no claims in v1) ----------
+
+enum SubscriberRelation {
+  SELF
+  SPOUSE
+  CHILD
+  OTHER
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  INACTIVE
+}
+
+model InsurancePolicy {
+  id             String             @id @default(uuid())
+  patientId      String
+  patient        Patient            @relation(fields: [patientId], references: [id])
+  payerName      String
+  planName       String?
+  memberId       String
+  groupNumber    String?
+  subscriberName String?
+  relation       SubscriberRelation @default(SELF)
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+  isVision       Boolean            @default(true) // vision vs medical plan
+  priority       Int                @default(1) // 1 = primary
+  cardFrontDocId String?
+  cardBackDocId  String?
+  verification   VerificationStatus @default(UNVERIFIED)
+  verifiedAt     DateTime?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([patientId])
+}
+
+// Practice catalog of insurance payers accepted at the front desk.
+model AcceptedPayer {
+  id         String   @id @default(uuid())
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+  name       String // e.g. VSP, EyeMed, Medicare
+  notes      String?
+  isVision   Boolean  @default(true)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([practiceId, name])
+  @@index([practiceId, isActive])
+}
+
+// ---------- Scheduling ----------
+
+model AppointmentType {
+  id           String   @id @default(uuid())
+  practiceId   String
+  practice     Practice @relation(fields: [practiceId], references: [id])
+  name         String // Comprehensive Exam, CL Fitting, Follow-up...
+  durationMin  Int      @default(30)
+  color        String? // calendar display
+  isActive     Boolean  @default(true)
+
+  appointments Appointment[]
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id         String            @id @default(uuid())
+  practiceId String
+  practice   Practice          @relation(fields: [practiceId], references: [id])
+  patientId  String
+  patient    Patient           @relation(fields: [patientId], references: [id])
+  providerId String
+  provider   User              @relation("Provider", fields: [providerId], references: [id])
+  typeId     String
+  type       AppointmentType   @relation(fields: [typeId], references: [id])
+  startsAt   DateTime
+  endsAt     DateTime
+  status     AppointmentStatus @default(SCHEDULED)
+  notes      String?
+  cancelReason String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  encounter Encounter?
+
+  @@index([practiceId, providerId, startsAt])
+  @@index([patientId, startsAt])
+}
+
+// ---------- Exams (encounters) ----------
+
+model ExamTemplate {
+  id         String   @id @default(uuid())
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+  name       String
+  version    Int      @default(1)
+  // Ordered section definitions: visibility, required flags, custom fields.
+  // Shape: [{ key, title, enabled, requiredFields: [], customFields: [{key,label,type}] }]
+  sections   Json
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  encounters Encounter[]
+
+  @@unique([practiceId, name, version])
+}
+
+enum EncounterStatus {
+  IN_PROGRESS
+  SIGNED
+}
+
+model Encounter {
+  id            String          @id @default(uuid())
+  practiceId    String
+  practice      Practice        @relation(fields: [practiceId], references: [id])
+  patientId     String
+  patient       Patient         @relation(fields: [patientId], references: [id])
+  appointmentId String?         @unique
+  appointment   Appointment?    @relation(fields: [appointmentId], references: [id])
+  templateId    String
+  template      ExamTemplate    @relation(fields: [templateId], references: [id])
+  status        EncounterStatus @default(IN_PROGRESS)
+
+  chiefComplaint String?
+  // Structured clinical data keyed by template section (validated in service layer).
+  // Includes: visualAcuity, refraction, keratometry, pupilsEomFields, iop, slitLamp,
+  // posteriorSegment, plus template custom sections.
+  clinicalData   Json     @default("{}")
+  assessment     String?
+  plan           String?
+  diagnosisCodes String[] // ICD-10
+  procedureCodes String[] // CPT (superbill support)
+
+  signedById String?
+  signedBy   User?     @relation("SignedBy", fields: [signedById], references: [id])
+  signedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addenda       Addendum[]
+  prescriptions Prescription[]
+  reports       GeneratedReport[]
+
+  @@index([practiceId, patientId, createdAt])
+}
+
+model Addendum {
+  id          String    @id @default(uuid())
+  encounterId String
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  text        String
+  createdAt   DateTime  @default(now())
+}
+
+// ---------- Prescriptions (immutable, versioned) ----------
+
+enum PrescriptionType {
+  SPECTACLE
+  CONTACT_LENS
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  FINALIZED
+  SUPERSEDED
+  EXPIRED
+}
+
+model Prescription {
+  id          String             @id @default(uuid())
+  practiceId  String
+  practice    Practice           @relation(fields: [practiceId], references: [id])
+  patientId   String
+  patient     Patient            @relation(fields: [patientId], references: [id])
+  encounterId String?
+  encounter   Encounter?         @relation(fields: [encounterId], references: [id])
+  prescriberId String
+  prescriber  User               @relation(fields: [prescriberId], references: [id])
+  type        PrescriptionType
+  status      PrescriptionStatus @default(DRAFT)
+  version     Int                @default(1)
+  supersedesId String?           @unique
+  supersedes   Prescription?     @relation("Supersession", fields: [supersedesId], references: [id])
+  supersededBy Prescription?     @relation("Supersession")
+
+  // Spectacle: { od: {sphere,cylinder,axis,add,prism,base}, os: {...}, pd, pdNear, remarks }
+  // Contact lens: { od: {brand,material,baseCurve,diameter,sphere,cylinder,axis,add}, os: {...},
+  //                 wearSchedule, replacementSchedule, remarks }
+  values Json
+
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+  finalizedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orders  OpticalOrder[]
+  reports GeneratedReport[]
+
+  @@index([patientId, type, status])
+}
+
+// ---------- Documents & reports ----------
+
+model Document {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  fileName    String
+  contentType String
+  blobPath    String // container-relative path in Azure Blob Storage
+  sha256      String
+  sizeBytes   Int
+  category    String? // insurance-card, external-record, scan...
+  uploadedById String?
+  createdAt   DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model ReportTemplate {
+  id         String   @id @default(uuid())
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+  name       String
+  kind       String // spectacle-rx | contact-lens-rx | exam-summary
+  version    Int      @default(1)
+  // Layout config: header/branding, visible fields, footer text, signature block.
+  layout     Json
+  isActive   Boolean  @default(true)
+  // Exactly one active default per kind is enforced in ReportsService.
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  reports GeneratedReport[]
+
+  @@unique([practiceId, name, version])
+}
+
+model GeneratedReport {
+  id             String         @id @default(uuid())
+  templateId     String
+  template       ReportTemplate @relation(fields: [templateId], references: [id])
+  encounterId    String?
+  encounter      Encounter?     @relation(fields: [encounterId], references: [id])
+  prescriptionId String?
+  prescription   Prescription?  @relation(fields: [prescriptionId], references: [id])
+  blobPath       String
+  sha256         String
+  generatedById  String
+  createdAt      DateTime       @default(now())
+}
+
+// ---------- Optical operations ----------
+
+enum OrderKind {
+  SPECTACLE
+  CONTACT_LENS
+}
+
+enum OrderStatus {
+  DRAFT
+  ORDERED
+  AT_LAB
+  RECEIVED
+  VERIFIED
+  DISPENSED
+  REMAKE
+  CANCELLED
+}
+
+model OpticalOrder {
+  id             String       @id @default(uuid())
+  practiceId     String
+  practice       Practice     @relation(fields: [practiceId], references: [id])
+  patientId      String
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+  kind           OrderKind
+  status         OrderStatus  @default(DRAFT)
+
+  // Spectacle: { frame: {brand,model,color,eye,bridge,temple,source}, lens: {design,material,
+  //   coatings[]}, measurements: {pdOd,pdOs,segHeightOd,segHeightOs,oc,vertex,pantoTilt,wrap} }
+  // Contact lens: { odQty, osQty, brand, supplyMonths, trial: boolean }
+  details Json
+
+  labName      String?
+  labReference String?
+  priceTotal   Decimal? @db.Decimal(10, 2)
+  deposit      Decimal? @db.Decimal(10, 2)
+  balanceDue   Decimal? @db.Decimal(10, 2)
+  warrantyNotes String?
+  remakeOfId   String?  @unique
+  remakeOf     OpticalOrder? @relation("Remake", fields: [remakeOfId], references: [id])
+  remadeBy     OpticalOrder? @relation("Remake")
+
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  dispensedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  statusEvents OrderStatusEvent[]
+
+  @@index([practiceId, status])
+  @@index([patientId])
+}
+
+model OrderStatusEvent {
+  id        String       @id @default(uuid())
+  orderId   String
+  order     OpticalOrder @relation(fields: [orderId], references: [id])
+  status    OrderStatus
+  note      String?
+  actorId   String?
+  createdAt DateTime     @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ---------- Inventory ----------
+
+enum InventoryKind {
+  FRAME
+  CONTACT_LENS_TRIAL
+  OTHER
+}
+
+model InventoryItem {
+  id         String        @id @default(uuid())
+  practiceId String
+  practice   Practice      @relation(fields: [practiceId], references: [id])
+  kind       InventoryKind
+  sku        String
+  brand      String?
+  model      String?
+  color      String?
+  size       String?
+  quantity   Int           @default(0)
+  cost       Decimal?      @db.Decimal(10, 2)
+  retail     Decimal?      @db.Decimal(10, 2)
+  isActive   Boolean       @default(true)
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([practiceId, sku])
+}
+
+// ---------- Recalls & tasks ----------
+
+enum RecallStatus {
+  PENDING
+  CONTACTED
+  SCHEDULED
+  DISMISSED
+}
+
+model Recall {
+  id         String       @id @default(uuid())
+  practiceId String
+  practice   Practice     @relation(fields: [practiceId], references: [id])
+  patientId  String
+  patient    Patient      @relation(fields: [patientId], references: [id])
+  reason     String // annual exam, CL follow-up...
+  dueDate    DateTime
+  status     RecallStatus @default(PENDING)
+  notes      String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([practiceId, status, dueDate])
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+model Task {
+  id         String     @id @default(uuid())
+  practiceId String
+  practice   Practice   @relation(fields: [practiceId], references: [id])
+  assigneeId String?
+  assignee   User?      @relation("Assignee", fields: [assigneeId], references: [id])
+  title      String
+  detail     String?
+  patientId  String?
+  dueDate    DateTime?
+  status     TaskStatus @default(OPEN)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([practiceId, status])
+}
+
+// ---------- Audit (append-only) ----------
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  EXPORT
+  PRINT
+  LOGIN
+  LOGOUT
+  SIGN
+  FINALIZE
+}
+
+model AuditEvent {
+  id         String      @id @default(uuid())
+  practiceId String
+  practice   Practice    @relation(fields: [practiceId], references: [id])
+  actorId    String?
+  actor      User?       @relation(fields: [actorId], references: [id])
+  action     AuditAction
+  entityType String // Patient, Encounter, Prescription...
+  entityId   String?
+  patientId  String? // denormalized for per-patient access reports
+  detail     String?
+  ip         String?
+  sessionId  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([practiceId, patientId, createdAt])
+  @@index([practiceId, actorId, createdAt])
+}

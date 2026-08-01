@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint --workspaces --if-present
+      - run: npm run typecheck --workspaces --if-present
+      - run: npx prisma validate --schema apps/api/prisma/schema.prisma
+      - run: npm test --workspaces --if-present
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspaces --if-present
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy API to staging slot
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_NAME }}
+          slot-name: staging
+          package: apps/api
+      - name: Deploy web to staging slot
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.WEB_APP_NAME }}
+          slot-name: staging
+          package: apps/web
+
+  swap-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production # manual approval gate configured on this environment
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Swap API slot
+        run: az webapp deployment slot swap -g ${{ vars.RESOURCE_GROUP }} -n ${{ vars.API_APP_NAME }} --slot staging
+      - name: Swap web slot
+        run: az webapp deployment slot swap -g ${{ vars.RESOURCE_GROUP }} -n ${{ vars.WEB_APP_NAME }} --slot staging
