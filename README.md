@@ -52,7 +52,7 @@ npm run dev:api    # http://localhost:3001
 npm run dev:web    # http://localhost:3000
 ```
 
-Dev sign-ins (password `test123`): `doctor@dev.local`, `tech@dev.local`,
+Dev sign-ins (password `test12340`): `doctor@dev.local`, `tech@dev.local`,
 `optician@dev.local`, `frontdesk@dev.local`, `admin@dev.local`.
 
 Run tests with `npm test`.

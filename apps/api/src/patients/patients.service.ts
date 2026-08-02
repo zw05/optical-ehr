@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderKind, PatientTag, PrescriptionType, Prisma, VerificationStatus } from '@prisma/client';
+import { OrderKind, PatientTag, PrescriptionStatus, PrescriptionType, Prisma, VerificationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto, UpdatePatientDto, AddHistoryDto } from './dto/patient.dto';
 
@@ -87,7 +87,7 @@ export class PatientsService {
         OR: [
           {
             prescriptions: {
-              some: { type: PrescriptionType.SPECTACLE, status: { not: 'DRAFT' } },
+              some: { type: PrescriptionType.SPECTACLE, status: { not: PrescriptionStatus.DRAFT } },
             },
           },
           { orders: { some: { kind: OrderKind.SPECTACLE } } },
@@ -98,7 +98,7 @@ export class PatientsService {
         OR: [
           {
             prescriptions: {
-              some: { type: PrescriptionType.CONTACT_LENS, status: { not: 'DRAFT' } },
+              some: { type: PrescriptionType.CONTACT_LENS, status: { not: PrescriptionStatus.DRAFT } },
             },
           },
           { orders: { some: { kind: OrderKind.CONTACT_LENS } } },
