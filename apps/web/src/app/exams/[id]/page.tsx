@@ -27,13 +27,15 @@ interface ProviderOption {
 
 interface EncounterDetail {
   id: string;
-  status: 'IN_PROGRESS' | 'SIGNED';
+  status: 'IN_PROGRESS' | 'SIGNED' | 'VOIDED';
   chiefComplaint: string | null;
   clinicalData: Record<string, Record<string, unknown>>;
   assessment: string | null;
   plan: string | null;
   diagnosisCodes: string[];
   signedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
   createdAt: string;
   template: { name: string; version: number; sections: TemplateSection[] };
   patient: {
@@ -41,13 +43,14 @@ interface EncounterDetail {
     mrn: string;
     firstName: string;
     lastName: string;
-    dateOfBirth: string;
+    dateOfBirth: string | null;
     phone: string | null;
     email: string | null;
     alerts: string | null;
     insurances?: { payerName: string; isVision: boolean; priority: number }[];
   };
   signedBy: { firstName: string; lastName: string; licenseNumber: string | null } | null;
+  voidedBy: { firstName: string; lastName: string } | null;
   addenda: { id: string; text: string; createdAt: string; author: { firstName: string; lastName: string } }[];
 }
 
@@ -184,7 +187,9 @@ export default function ExamPage() {
     };
   }, [encounter]);
 
-  const readOnly = encounter?.status === 'SIGNED';
+  const isSigned = encounter?.status === 'SIGNED';
+  const isVoided = encounter?.status === 'VOIDED';
+  const readOnly = isSigned || isVoided;
   const encounterRef = useRef(encounter);
   encounterRef.current = encounter;
   const readOnlyRef = useRef(readOnly);
@@ -317,6 +322,25 @@ export default function ExamPage() {
     }
   }
 
+  async function voidExam() {
+    if (!encounter) return;
+    const reason = window.prompt('Reason for voiding this exam (kept for audit):');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError('A reason is required to void an exam');
+      return;
+    }
+    setError(null);
+    try {
+      await api(`/encounters/${encounter.id}/void`, { method: 'POST', body: { reason: reason.trim() } });
+      setToast('Exam voided');
+      await load();
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Void failed');
+    }
+  }
+
   async function addAddendum() {
     if (!encounter || !addendumText.trim()) return;
     await api(`/encounters/${encounter.id}/addenda`, { method: 'POST', body: { text: addendumText } });
@@ -415,7 +439,9 @@ export default function ExamPage() {
               {encounter.patient.lastName}, {encounter.patient.firstName}
             </Link>{' '}
             · MRN {encounter.patient.mrn} · {encounter.template.name} v{encounter.template.version} ·{' '}
-            {readOnly ? (
+            {isVoided ? (
+              <span className="badge danger">Voided</span>
+            ) : isSigned ? (
               <span className="badge success">
                 Signed {encounter.signedAt ? new Date(encounter.signedAt).toLocaleString() : ''} by Dr.{' '}
                 {encounter.signedBy?.lastName}
@@ -425,6 +451,14 @@ export default function ExamPage() {
             )}
           </p>
           {encounter.patient.alerts && <p className="badge danger">{encounter.patient.alerts}</p>}
+          {isVoided && (
+            <p className="error-text" role="status">
+              This exam was voided
+              {encounter.voidedAt ? ` on ${new Date(encounter.voidedAt).toLocaleString()}` : ''}
+              {encounter.voidedBy ? ` by Dr. ${encounter.voidedBy.lastName}` : ''}
+              {encounter.voidReason ? ` — ${encounter.voidReason}` : ''}
+            </p>
+          )}
         </div>
         <div className="exam-actions">
           {!readOnly && (
@@ -435,6 +469,11 @@ export default function ExamPage() {
               {canSign && (
                 <button type="button" className="danger" onClick={finalize}>
                   Finalize Exam
+                </button>
+              )}
+              {canSign && (
+                <button type="button" className="secondary" onClick={voidExam}>
+                  Void Exam
                 </button>
               )}
             </>

@@ -60,6 +60,7 @@ model User {
   createdAt     DateTime @default(now())
 
   signedEncounters Encounter[]    @relation("SignedBy")
+  voidedEncounters Encounter[]    @relation("VoidedBy")
   prescriptions    Prescription[]
   addenda          Addendum[]
   auditEvents      AuditEvent[]
@@ -92,7 +93,7 @@ model Patient {
   mrn        String // human-friendly chart number, unique per practice
   firstName  String
   lastName   String
-  dateOfBirth DateTime
+  dateOfBirth DateTime?
   sex        Sex       @default(UNKNOWN)
   email      String?
   phone      String?
@@ -101,8 +102,6 @@ model Patient {
   state      String?
   zip        String?
   preferredContact String? // phone | email | sms
-  guardianName     String?
-  guardianPhone    String?
   alerts     String? // allergies to drops, mobility needs, etc.
   notes      String?
   tags       PatientTag[] @default([])
@@ -223,6 +222,7 @@ model AppointmentType {
 enum AppointmentStatus {
   SCHEDULED
   CONFIRMED
+  WAITING
   CHECKED_IN
   IN_PROGRESS
   COMPLETED
@@ -276,6 +276,7 @@ model ExamTemplate {
 enum EncounterStatus {
   IN_PROGRESS
   SIGNED
+  VOIDED
 }
 
 model Encounter {
@@ -303,6 +304,13 @@ model Encounter {
   signedById String?
   signedBy   User?     @relation("SignedBy", fields: [signedById], references: [id])
   signedAt   DateTime?
+
+  // Voiding retracts a draft exam without destroying it; signed exams are
+  // corrected with addenda instead.
+  voidedById String?
+  voidedBy   User?     @relation("VoidedBy", fields: [voidedById], references: [id])
+  voidedAt   DateTime?
+  voidReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

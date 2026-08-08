@@ -18,6 +18,8 @@
   --warning-soft: rgba(180, 83, 9, 0.1);
   --radius: 6px;
   --sidebar-w: 224px;
+  --sidebar-rail-w: 56px;
+  --sidebar-footprint: var(--sidebar-w);
   --topbar-bg: #ffffff;
   --topbar-text: #1a1a19;
   --topbar-muted: #6b6b68;
@@ -61,6 +63,15 @@ html[data-density='compact'] {
 html[data-density='comfortable'] {
   --space-unit: 1rem;
   --control-min-height: 2.25rem;
+}
+
+html[data-sidebar='expanded'] {
+  --sidebar-footprint: var(--sidebar-w);
+}
+
+html[data-sidebar='rail'],
+html[data-sidebar='auto'] {
+  --sidebar-footprint: var(--sidebar-rail-w);
 }
 
 /* Paper (explicit light) */
@@ -334,6 +345,7 @@ h2 {
   min-height: 100vh;
   border-right: 1px solid var(--border);
   box-sizing: border-box;
+  position: relative;
 }
 
 .topbar-brand {
@@ -347,6 +359,52 @@ h2 {
   padding: 0.25rem 0.5rem 1rem;
   flex-shrink: 0;
   letter-spacing: -0.01em;
+}
+
+.topbar-brand-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.topbar-brand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--topbar-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.topbar-brand-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--topbar-text);
+}
+
+html[data-theme='dark'] .topbar-brand-toggle:hover,
+html[data-theme='ink'] .topbar-brand-toggle:hover,
+html[data-theme='forest'] .topbar-brand-toggle:hover,
+html[data-theme='high-contrast'] .topbar-brand-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme='system'] .topbar-brand-toggle:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.topbar-brand-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .topbar-brand-mark {
@@ -487,6 +545,7 @@ html[data-theme='high-contrast'] .topbar-item.active {
   place-items: center;
   font-size: 0.68rem;
   font-weight: 650;
+  flex-shrink: 0;
 }
 
 .topbar-user-meta {
@@ -509,6 +568,127 @@ html[data-theme='high-contrast'] .topbar-item.active {
   font-size: 0.72rem;
   opacity: 1;
   color: var(--topbar-muted);
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 30;
+  touch-action: none;
+  background: transparent;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:focus-visible {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.sidebar-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  opacity: 0.55;
+}
+
+/* Label for a collapsed rail icon. Fixed so .topbar-nav's overflow cannot clip it. */
+.sidebar-tooltip {
+  position: fixed;
+  transform: translateY(-50%);
+  z-index: 60;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+body[data-sidebar-resizing] {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body[data-sidebar-resizing] .shell,
+body[data-sidebar-resizing] .topbar {
+  transition: none !important;
+}
+
+@media (min-width: 701px) {
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-footprint) 1fr;
+    transition: grid-template-columns 140ms ease;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    width: var(--sidebar-footprint);
+    height: 100vh;
+    min-height: 0;
+    transition: width 140ms ease;
+  }
+
+  html[data-sidebar='auto'] .topbar:hover,
+  html[data-sidebar='auto'] .topbar:focus-within {
+    width: var(--sidebar-w);
+    z-index: 20;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  }
+
+  html[data-sidebar='rail'] .topbar-item > span,
+  html[data-sidebar='rail'] .topbar-brand-text,
+  html[data-sidebar='rail'] .topbar-user-meta,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-item > span,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-brand-text,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-user-meta {
+    display: none;
+  }
+
+  html[data-sidebar='rail'] .topbar-item,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-item {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    gap: 0;
+  }
+
+  /* The mark (20px) plus toggle (28px) cannot sit side by side in the rail's
+     content box, so stack them instead of letting them spill into the padding. */
+  html[data-sidebar='rail'] .topbar-brand,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-brand {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0 0.75rem;
+  }
+
+  html[data-sidebar='rail'] .topbar-brand-toggle,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-brand-toggle {
+    margin-left: 0;
+  }
+
+  html[data-sidebar='rail'] .topbar-user,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-user {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+  }
+
+  html[data-sidebar='rail'] .sidebar-resize-handle,
+  html[data-sidebar='auto'] .sidebar-resize-handle {
+    display: none;
+  }
 }
 
 .main {
@@ -569,6 +749,75 @@ html[data-theme='high-contrast'] .topbar-item.active {
   margin-bottom: 1rem;
 }
 
+.detail-list {
+  display: grid;
+  margin: 0;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 34%) 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-row dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.detail-row dd.empty {
+  color: var(--text-subtle);
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+}
+
+.policy-block {
+  margin-bottom: 1rem;
+}
+
+.policy-block:last-child {
+  margin-bottom: 0;
+}
+
+.policy-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.policy-block-header strong {
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .detail-row {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -609,6 +858,128 @@ html[data-theme='high-contrast'] .topbar-item.active {
   align-items: stretch;
 }
 
+/* Today board (dashboard) */
+.today-board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.today-board-title .page-header {
+  margin-bottom: 0.15rem;
+}
+
+.today-board-date {
+  margin: 0;
+}
+
+.today-board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+a.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+a.button-link:hover {
+  background: var(--surface-2, var(--surface));
+  border-color: var(--text-muted, var(--border));
+}
+
+.today-board-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.today-count {
+  display: flex;
+  flex-direction: column;
+  min-width: 5.5rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.today-count-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.today-count-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.35rem 0.15rem 0.5rem;
+}
+
+.empty-state .muted {
+  margin: 0;
+}
+
+.book-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.book-dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  max-width: 42rem;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.book-dialog-form {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.book-dialog-form h2 {
+  margin-top: 0;
+}
+
 @media (max-width: 1100px) {
   .panel-grid {
     grid-template-columns: 1fr 1fr;
@@ -621,11 +992,15 @@ html[data-theme='high-contrast'] .topbar-item.active {
   }
 
   .shell {
+    display: flex;
     flex-direction: column;
+    grid-template-columns: none;
   }
 
   .topbar {
+    position: static;
     width: 100%;
+    height: auto;
     min-height: 0;
     flex-direction: row;
     align-items: center;
@@ -634,9 +1009,14 @@ html[data-theme='high-contrast'] .topbar-item.active {
     padding: 0.5rem 0.75rem;
     gap: 0.5rem;
     overflow-x: auto;
+    box-shadow: none;
   }
 
   .topbar-brand {
+    display: none;
+  }
+
+  .sidebar-resize-handle {
     display: none;
   }
 
@@ -834,7 +1214,7 @@ button:disabled {
 
 /* :where() keeps this at plain-element specificity so component rules
    further down (.exam-small-btn, .settings-reorder-item button) still win. */
-button:not(:where(.topbar-item, .patient-card, .exam-tab, .subtab, .search-suggestion, .back-button)),
+button:not(:where(.topbar-item, .topbar-brand-toggle, .patient-card, .exam-tab, .subtab, .search-suggestion, .back-button, .appt-action)),
 .btn {
   height: var(--control-min-height);
   padding: 0 0.75rem;
@@ -844,10 +1224,61 @@ button:not(:where(.topbar-item, .patient-card, .exam-tab, .subtab, .search-sugge
   white-space: nowrap;
 }
 
-button:not(:where(.topbar-item, .patient-card, .exam-tab, .subtab, .search-suggestion, .back-button)):hover,
+button:not(:where(.topbar-item, .topbar-brand-toggle, .patient-card, .exam-tab, .subtab, .search-suggestion, .back-button, .appt-action)):hover,
 .btn:hover {
   opacity: 0.88;
   filter: none;
+}
+
+/* Compact appointment row actions (dashboard / schedule) */
+.appt-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.appt-action {
+  height: 1.65rem;
+  padding: 0 0.55rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 1px);
+  font-size: 0.78rem;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.appt-action-primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: transparent;
+}
+
+.appt-action-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.appt-action-quiet {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.appt-action-quiet:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+.appt-action-cancel {
+  background: transparent;
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.appt-action-cancel:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 
 button.secondary {

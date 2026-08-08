@@ -36,8 +36,10 @@ export class SchedulingService {
   // ----- appointments -----
 
   /**
-   * Books an appointment. The end time is computed from the type's duration,
-   * and the provider's calendar is checked for double-booking (409 on overlap).
+   * Books an appointment. Timed bookings compute end time from the type's
+   * duration and check the provider calendar for double-booking (409 on overlap).
+   * Walk-ins (`walkIn: true`) land in WAITING with now-based times and skip
+   * the overlap check so they do not occupy a scheduled slot.
    */
   async create(practiceId: string, dto: CreateAppointmentDto) {
     const type = await this.prisma.appointmentType.findFirst({
@@ -45,9 +47,17 @@ export class SchedulingService {
     });
     if (!type) throw new NotFoundException('Appointment type not found');
 
-    const startsAt = new Date(dto.startsAt);
+    const isWalkIn = Boolean(dto.walkIn);
+    if (!isWalkIn && !dto.startsAt) {
+      throw new BadRequestException('startsAt is required unless walkIn is true');
+    }
+
+    const startsAt = isWalkIn ? new Date() : new Date(dto.startsAt!);
     const endsAt = new Date(startsAt.getTime() + type.durationMin * 60_000);
-    await this.assertNoOverlap(dto.providerId, startsAt, endsAt);
+
+    if (!isWalkIn) {
+      await this.assertNoOverlap(dto.providerId, startsAt, endsAt);
+    }
 
     return this.prisma.appointment.create({
       data: {
@@ -57,19 +67,30 @@ export class SchedulingService {
         typeId: dto.typeId,
         startsAt,
         endsAt,
+        status: isWalkIn ? AppointmentStatus.WAITING : AppointmentStatus.SCHEDULED,
         notes: dto.notes,
       },
       include: { patient: { select: { firstName: true, lastName: true, mrn: true } }, type: true },
     });
   }
 
-  /** Returns appointments in [from, to), optionally for one provider — the day/week view. */
-  async calendar(practiceId: string, from: string, to: string, providerId?: string) {
+  /**
+   * Returns appointments in [from, to), optionally filtered by provider and/or status.
+   * Used by the day/week calendar and dashboard history widgets.
+   */
+  async calendar(
+    practiceId: string,
+    from: string,
+    to: string,
+    providerId?: string,
+    status?: AppointmentStatus,
+  ) {
     return this.prisma.appointment.findMany({
       where: {
         practiceId,
         startsAt: { gte: new Date(from), lt: new Date(to) },
         ...(providerId ? { providerId } : {}),
+        ...(status ? { status } : {}),
       },
       orderBy: { startsAt: 'asc' },
       include: {

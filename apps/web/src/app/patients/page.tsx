@@ -1,12 +1,11 @@
 'use client';
 
-/** Patient search, filters, recent charts, and new-patient registration. */
+/** Patient directory, search, filters, and new-patient registration. */
 import { useCallback, useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import PatientSearchBox from '@/components/PatientSearchBox';
 import { api } from '@/lib/api';
-import { getRecentPatients, type RecentPatient } from '@/lib/recentPatients';
 import { PATIENT_TAGS, patientTagLabel, type PatientTag } from '@/lib/patientTags';
 
 interface PatientRow {
@@ -14,11 +13,12 @@ interface PatientRow {
   mrn: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   phone: string | null;
   email: string | null;
   alerts: string | null;
   tags?: PatientTag[];
+  lastSeenAt: string | null;
 }
 
 interface Filters {
@@ -43,40 +43,65 @@ const EMPTY_FILTERS: Filters = {
   hasAlerts: false,
 };
 
-function ageFromDob(dob: string): number {
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age -= 1;
-  return age;
-}
-
-function relativeViewed(viewedAt: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - viewedAt) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function initials(firstName: string, lastName: string): string {
-  return `${firstName?.[0] ?? ''}${lastName?.[0] ?? ''}`.toUpperCase() || '?';
-}
-
 function hasActiveFilters(filters: Filters): boolean {
   return Boolean(
     filters.category ||
-      filters.tag ||
-      filters.payer ||
-      filters.insurance ||
-      filters.recall ||
-      filters.lastSeen ||
-      filters.ageGroup ||
-      filters.hasAlerts,
+    filters.tag ||
+    filters.payer ||
+    filters.insurance ||
+    filters.recall ||
+    filters.lastSeen ||
+    filters.ageGroup ||
+    filters.hasAlerts,
+  );
+}
+
+function PatientTable({
+  rows,
+  onOpen,
+}: {
+  rows: PatientRow[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>MRN</th>
+          <th>Name</th>
+          <th>DOB</th>
+          <th>Phone</th>
+          <th>Last seen</th>
+          <th>Tags</th>
+          <th>Alerts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p) => (
+          <tr key={p.id} className="clickable" onClick={() => onOpen(p.id)}>
+            <td>{p.mrn}</td>
+            <td>
+              {p.lastName}, {p.firstName}
+            </td>
+            <td>{p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString() : '—'}</td>
+            <td>{p.phone ?? '—'}</td>
+            <td className={p.lastSeenAt ? undefined : 'muted'}>
+              {p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleDateString() : 'Never'}
+            </td>
+            <td>
+              {p.tags && p.tags.length > 0
+                ? p.tags.map((tag) => (
+                  <span key={tag} className="badge" style={{ marginRight: '0.25rem' }}>
+                    {patientTagLabel(tag)}
+                  </span>
+                ))
+                : '—'}
+            </td>
+            <td>{p.alerts ? <span className="badge danger">{p.alerts}</span> : '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -84,30 +109,54 @@ export default function PatientsPage() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PatientRow[]>([]);
-  const [view, setView] = useState<'recent' | 'results'>('recent');
-  const [recent, setRecent] = useState<RecentPatient[]>([]);
+  const [directory, setDirectory] = useState<PatientRow[]>([]);
+  const [view, setView] = useState<'directory' | 'results'>('directory');
   const [showNew, setShowNew] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [payers, setPayers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ firstName: '', lastName: '', dateOfBirth: '', phone: '', email: '' });
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+  });
+
+  const loadDirectory = useCallback(async () => {
+    setDirectoryLoading(true);
+    setError(null);
+    try {
+      const rows = await api<PatientRow[]>('/patients/directory?take=200');
+      setDirectory(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load patients');
+      setDirectory([]);
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setRecent(getRecentPatients());
+    void loadDirectory();
     api<{ payers: string[] }>('/patients/filter-options')
       .then((data) => setPayers(data.payers))
       .catch(() => setPayers([]));
-  }, []);
+  }, [loadDirectory]);
 
   const loadResults = useCallback(async (q: string, nextFilters: Filters) => {
     const active = hasActiveFilters(nextFilters);
     const trimmed = q.trim();
     if (!trimmed && !active) {
       setResults([]);
-      setView('recent');
-      setRecent(getRecentPatients());
+      setView('directory');
       return;
     }
 
@@ -157,9 +206,8 @@ export default function PatientsPage() {
     setQuery('');
     setFilters(EMPTY_FILTERS);
     setResults([]);
-    setView('recent');
+    setView('directory');
     setError(null);
-    setRecent(getRecentPatients());
   }
 
   function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -170,8 +218,7 @@ export default function PatientsPage() {
     setFilters(EMPTY_FILTERS);
     if (!query.trim()) {
       setResults([]);
-      setView('recent');
-      setRecent(getRecentPatients());
+      setView('directory');
     } else {
       void loadResults(query, EMPTY_FILTERS);
     }
@@ -186,9 +233,13 @@ export default function PatientsPage() {
         body: {
           firstName: form.firstName,
           lastName: form.lastName,
-          dateOfBirth: form.dateOfBirth,
+          dateOfBirth: form.dateOfBirth || undefined,
           phone: form.phone || undefined,
           email: form.email || undefined,
+          address: form.address || undefined,
+          city: form.city || undefined,
+          state: form.state || undefined,
+          zip: form.zip || undefined,
         },
       });
       router.push(`/patients/${patient.id}`);
@@ -199,6 +250,7 @@ export default function PatientsPage() {
 
   const showingResults = view === 'results';
   const filtersActive = hasActiveFilters(filters);
+  const openPatient = (id: string) => router.push(`/patients/${id}`);
 
   return (
     <AppShell>
@@ -335,10 +387,9 @@ export default function PatientsPage() {
               <input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
             </div>
             <div className="field">
-              <label>Date of birth</label>
+              <label>Date of Birth</label>
               <input
                 type="date"
-                required
                 value={form.dateOfBirth}
                 onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
               />
@@ -351,13 +402,29 @@ export default function PatientsPage() {
               <label>Email</label>
               <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
+            <div className="field">
+              <label>Address</label>
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>City</label>
+              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>State</label>
+              <input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>ZIP</label>
+              <input value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} />
+            </div>
           </div>
           {error && <p className="error-text">{error}</p>}
           <button type="submit">Create chart</button>
         </form>
       )}
 
-      {error && showingResults && <p className="error-text">{error}</p>}
+      {error && !showNew && <p className="error-text">{error}</p>}
 
       {showingResults ? (
         <section className="panel">
@@ -370,75 +437,22 @@ export default function PatientsPage() {
             ) : results.length === 0 ? (
               <p className="muted">No matching patients.</p>
             ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>MRN</th>
-                    <th>Name</th>
-                    <th>DOB</th>
-                    <th>Phone</th>
-                    <th>Tags</th>
-                    <th>Alerts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((p) => (
-                    <tr key={p.id} className="clickable" onClick={() => router.push(`/patients/${p.id}`)}>
-                      <td>{p.mrn}</td>
-                      <td>
-                        {p.lastName}, {p.firstName}
-                      </td>
-                      <td>{new Date(p.dateOfBirth).toLocaleDateString()}</td>
-                      <td>{p.phone ?? '—'}</td>
-                      <td>
-                        {p.tags && p.tags.length > 0
-                          ? p.tags.map((tag) => (
-                              <span key={tag} className="badge" style={{ marginRight: '0.25rem' }}>
-                                {patientTagLabel(tag)}
-                              </span>
-                            ))
-                          : '—'}
-                      </td>
-                      <td>{p.alerts ? <span className="badge danger">{p.alerts}</span> : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PatientTable rows={results} onOpen={openPatient} />
             )}
           </div>
         </section>
       ) : (
         <section className="panel">
-          <div className="panel-header">Recent patients ({recent.length})</div>
+          <div className="panel-header">
+            All patients ({directoryLoading ? '…' : directory.length})
+          </div>
           <div className="panel-body">
-            {recent.length === 0 ? (
-              <p className="muted">No recent charts yet. Open a patient chart and it will appear here.</p>
+            {directoryLoading ? (
+              <p className="muted">Loading patients…</p>
+            ) : directory.length === 0 ? (
+              <p className="muted">No patients on file yet. Register a chart to get started.</p>
             ) : (
-              <div className="patient-card-grid">
-                {recent.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="patient-card"
-                    onClick={() => router.push(`/patients/${p.id}`)}
-                  >
-                    <div className="patient-card-avatar" aria-hidden>
-                      {initials(p.firstName, p.lastName)}
-                    </div>
-                    <div className="patient-card-body">
-                      <div className="patient-card-name">
-                        {p.lastName}, {p.firstName}
-                      </div>
-                      <div className="patient-card-meta">
-                        MRN {p.mrn} · Age {ageFromDob(p.dateOfBirth)} ·{' '}
-                        {new Date(p.dateOfBirth).toLocaleDateString()}
-                      </div>
-                      {p.alerts && <span className="badge danger">{p.alerts}</span>}
-                      <div className="patient-card-viewed muted">Viewed {relativeViewed(p.viewedAt)}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <PatientTable rows={directory} onOpen={openPatient} />
             )}
           </div>
         </section>

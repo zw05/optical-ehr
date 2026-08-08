@@ -14,6 +14,11 @@ export type ThemePreference =
 export type FontScale = 'sm' | 'md' | 'lg' | 'xl';
 export type Density = 'compact' | 'comfortable';
 export type FontFamilyPref = 'system' | 'serif' | 'dyslexic';
+export type SidebarMode = 'expanded' | 'rail' | 'auto';
+
+export const SIDEBAR_MIN_W = 180;
+export const SIDEBAR_MAX_W = 400;
+export const DEFAULT_SIDEBAR_W = 224;
 
 export interface UserPreferences {
   appearance: {
@@ -21,6 +26,10 @@ export interface UserPreferences {
     fontScale: FontScale;
     density: Density;
     fontFamily: FontFamilyPref;
+  };
+  sidebar: {
+    mode: SidebarMode;
+    width: number;
   };
   exam: {
     defaultTab: string;
@@ -62,6 +71,10 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     density: 'comfortable',
     fontFamily: 'system',
   },
+  sidebar: {
+    mode: 'expanded',
+    width: DEFAULT_SIDEBAR_W,
+  },
   exam: {
     defaultTab: 'hpi',
     tabOrder: [],
@@ -72,7 +85,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     autoSaveSeconds: null,
   },
   dashboard: {
-    panelOrder: ['appointments', 'orders', 'recalls'],
+    panelOrder: [
+      'patientFlow',
+      'appointments',
+      'unsignedEncounters',
+      'myTasks',
+      'orders',
+      'recalls',
+      'apptHistory',
+    ],
     hiddenPanels: [],
     landingRoute: '/dashboard',
   },
@@ -94,6 +115,23 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
 export const PREFS_STORAGE_KEY = 'ehr.prefs';
 
 const SECTION_KEYS = Object.keys(DEFAULT_PREFERENCES) as (keyof UserPreferences)[];
+
+/**
+ * Clamp sidebar width to hard bounds (180–400) and optionally to 1/3 of the viewport
+ * so a wide setting from a large monitor does not overwhelm a smaller screen.
+ */
+export function clampSidebarWidth(px: number, viewportWidth?: number): number {
+  let w = Math.round(px);
+  if (Number.isNaN(w)) w = DEFAULT_SIDEBAR_W;
+  w = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, w));
+  if (typeof viewportWidth === 'number' && viewportWidth > 0) {
+    const ceiling = Math.floor(viewportWidth / 3);
+    if (ceiling >= SIDEBAR_MIN_W) {
+      w = Math.min(w, ceiling);
+    }
+  }
+  return w;
+}
 
 /** Deep-merge a stored/partial prefs object over defaults. */
 export function mergePreferences(stored: unknown): UserPreferences {
@@ -128,6 +166,16 @@ export function mergePreferences(stored: unknown): UserPreferences {
     result.printing.copies = 1;
   } else {
     result.printing.copies = Math.min(5, Math.round(copies));
+  }
+  const sidebarMode = result.sidebar.mode;
+  if (sidebarMode !== 'expanded' && sidebarMode !== 'rail' && sidebarMode !== 'auto') {
+    result.sidebar.mode = DEFAULT_PREFERENCES.sidebar.mode;
+  }
+  const sidebarWidth = result.sidebar.width;
+  if (typeof sidebarWidth !== 'number' || Number.isNaN(sidebarWidth)) {
+    result.sidebar.width = DEFAULT_SIDEBAR_W;
+  } else {
+    result.sidebar.width = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, Math.round(sidebarWidth)));
   }
   return result;
 }
@@ -179,4 +227,8 @@ export function applyPreferences(prefs: UserPreferences) {
   root.setAttribute('data-reduced-motion', prefs.accessibility.reducedMotion ? 'on' : 'off');
   root.setAttribute('data-focus-ring', prefs.accessibility.boldFocusRing ? 'bold' : 'default');
   root.setAttribute('data-underline-links', prefs.accessibility.underlineLinks ? 'on' : 'off');
+  root.setAttribute('data-sidebar', prefs.sidebar.mode);
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : undefined;
+  const width = clampSidebarWidth(prefs.sidebar.width, viewportW);
+  root.style.setProperty('--sidebar-w', `${width}px`);
 }

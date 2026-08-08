@@ -342,7 +342,7 @@ export class ReportsService {
     version: number;
     issuedAt: Date | null;
     expiresAt: Date | null;
-    patient: { firstName: string; lastName: string; mrn: string; dateOfBirth: Date };
+    patient: { firstName: string; lastName: string; mrn: string; dateOfBirth: Date | null };
     prescriber: { firstName: string; lastName: string; licenseNumber: string | null; npi: string | null };
     practice: { name: string; phone: string | null; address: string | null; logoUrl?: string | null };
   }): ReportContent {
@@ -356,7 +356,7 @@ export class ReportsService {
       patient: {
         name: `${rx.patient.lastName}, ${rx.patient.firstName}`,
         mrn: rx.patient.mrn,
-        dateOfBirth: rx.patient.dateOfBirth.toISOString().slice(0, 10),
+        dateOfBirth: rx.patient.dateOfBirth?.toISOString().slice(0, 10) ?? null,
       },
       provider: {
         name: `Dr. ${rx.prescriber.firstName} ${rx.prescriber.lastName}`,

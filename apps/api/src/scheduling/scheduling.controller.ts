@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 import { SchedulingService } from './scheduling.service';
 import {
+  CalendarQueryDto,
   CreateAppointmentDto,
   CreateAppointmentTypeDto,
   SetStatusDto,
@@ -36,15 +37,16 @@ export class SchedulingController {
     return this.scheduling.create(user.practiceId, dto);
   }
 
-  /** GET /api/appointments?from=&to=&providerId= — calendar range query. */
+  /** GET /api/appointments?from=&to=&providerId=&status= — calendar range query. */
   @Get()
-  calendar(
-    @CurrentUser() user: JwtPayload,
-    @Query('from') from: string,
-    @Query('to') to: string,
-    @Query('providerId') providerId?: string,
-  ) {
-    return this.scheduling.calendar(user.practiceId, from, to, providerId);
+  calendar(@CurrentUser() user: JwtPayload, @Query() query: CalendarQueryDto) {
+    return this.scheduling.calendar(
+      user.practiceId,
+      query.from,
+      query.to,
+      query.providerId,
+      query.status,
+    );
   }
 
   /** PATCH /api/appointments/:id — reschedule time/provider/type. */

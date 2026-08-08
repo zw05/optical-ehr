@@ -25,6 +25,12 @@ describe('mergePreferences', () => {
     expect(mergePreferences({ accessibility: { idleTimeoutMinutes: 2 } }).accessibility.idleTimeoutMinutes).toBe(5);
     expect(mergePreferences({ accessibility: { idleTimeoutMinutes: 99 } }).accessibility.idleTimeoutMinutes).toBe(30);
   });
+
+  it('clamps sidebar width to 180–400 and rejects invalid modes', () => {
+    expect(mergePreferences({ sidebar: { width: 50 } }).sidebar.width).toBe(180);
+    expect(mergePreferences({ sidebar: { width: 999 } }).sidebar.width).toBe(400);
+    expect(mergePreferences({ sidebar: { mode: 'floating' } }).sidebar.mode).toBe('expanded');
+  });
 });
 
 describe('applyPreferencePatch', () => {

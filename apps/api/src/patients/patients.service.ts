@@ -1,5 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderKind, PatientTag, PrescriptionStatus, PrescriptionType, Prisma, VerificationStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  OrderKind,
+  PatientTag,
+  PrescriptionStatus,
+  PrescriptionType,
+  Prisma,
+  VerificationStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto, UpdatePatientDto, AddHistoryDto } from './dto/patient.dto';
 
@@ -15,6 +23,32 @@ export interface PatientSearchFilters {
   hasAlerts?: boolean;
 }
 
+/** Shared list projection: demographics plus slices used to derive lastSeenAt. */
+const PATIENT_LIST_SELECT = {
+  id: true,
+  mrn: true,
+  firstName: true,
+  lastName: true,
+  dateOfBirth: true,
+  phone: true,
+  email: true,
+  alerts: true,
+  tags: true,
+  encounters: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+    select: { createdAt: true },
+  },
+  appointments: {
+    where: { status: AppointmentStatus.COMPLETED },
+    orderBy: { startsAt: 'desc' as const },
+    take: 1,
+    select: { startsAt: true },
+  },
+} satisfies Prisma.PatientSelect;
+
+type PatientListRow = Prisma.PatientGetPayload<{ select: typeof PATIENT_LIST_SELECT }>;
+
 function hasActiveFilters(filters?: PatientSearchFilters): boolean {
   if (!filters) return false;
   return Boolean(
@@ -29,6 +63,22 @@ function hasActiveFilters(filters?: PatientSearchFilters): boolean {
   );
 }
 
+/**
+ * Folds the latest encounter/appointment slices into a single lastSeenAt and
+ * drops the nested arrays from the API payload.
+ */
+function withLastSeen(rows: PatientListRow[]) {
+  return rows.map(({ encounters, appointments, ...rest }) => {
+    const encounterAt = encounters[0]?.createdAt?.getTime() ?? 0;
+    const appointmentAt = appointments[0]?.startsAt?.getTime() ?? 0;
+    const latest = Math.max(encounterAt, appointmentAt);
+    return {
+      ...rest,
+      lastSeenAt: latest > 0 ? new Date(latest).toISOString() : null,
+    };
+  });
+}
+
 /** Patient chart CRUD, search, history, merge, and right-of-access export. */
 @Injectable()
 export class PatientsService {
@@ -40,10 +90,11 @@ export class PatientsService {
    */
   async create(practiceId: string, dto: CreatePatientDto) {
     const mrn = await this.nextMrn(practiceId);
+    const { dateOfBirth, ...rest } = dto;
     return this.prisma.patient.create({
       data: {
-        ...dto,
-        dateOfBirth: new Date(dto.dateOfBirth),
+        ...rest,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         practiceId,
         mrn,
       },
@@ -163,22 +214,46 @@ export class PatientsService {
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
     };
 
-    return this.prisma.patient.findMany({
-      where,
-      take: limit,
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      select: {
-        id: true,
-        mrn: true,
-        firstName: true,
-        lastName: true,
-        dateOfBirth: true,
-        phone: true,
-        email: true,
-        alerts: true,
-        tags: true,
-      },
+    return withLastSeen(
+      await this.prisma.patient.findMany({
+        where,
+        take: limit,
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        select: PATIENT_LIST_SELECT,
+      }),
+    );
+  }
+
+  /**
+   * Practice-wide patient directory ordered by most recent visit (latest of
+   * encounter createdAt or COMPLETED appointment startsAt). Never-seen charts
+   * sort last. Sort is in-memory because Prisma cannot orderBy max of a to-many
+   * relation — upgrade to a raw lateral join if chart volume grows.
+   */
+  async directory(practiceId: string, take = 200) {
+    const limit = Number.isFinite(take) ? Math.min(Math.max(1, take), 200) : 200;
+    const rows = withLastSeen(
+      await this.prisma.patient.findMany({
+        where: { practiceId, isActive: true, mergedIntoId: null },
+        select: PATIENT_LIST_SELECT,
+      }),
+    );
+
+    rows.sort((a, b) => {
+      if (a.lastSeenAt && b.lastSeenAt) {
+        const byDate = b.lastSeenAt.localeCompare(a.lastSeenAt);
+        if (byDate !== 0) return byDate;
+      } else if (a.lastSeenAt && !b.lastSeenAt) {
+        return -1;
+      } else if (!a.lastSeenAt && b.lastSeenAt) {
+        return 1;
+      }
+      const byLast = a.lastName.localeCompare(b.lastName);
+      if (byLast !== 0) return byLast;
+      return a.firstName.localeCompare(b.firstName);
     });
+
+    return rows.slice(0, limit);
   }
 
   /** Distinct payer names used on charts in this practice, for filter dropdowns. */

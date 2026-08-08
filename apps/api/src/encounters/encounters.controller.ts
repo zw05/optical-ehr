@@ -9,6 +9,7 @@ import {
   CreateEncounterDto,
   ListEncountersDto,
   UpdateEncounterDto,
+  VoidEncounterDto,
 } from './encounters.dto';
 
 /**
@@ -62,6 +63,17 @@ export class EncountersController {
   @Roles(Role.DOCTOR)
   sign(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.encounters.sign(user.practiceId, id, user);
+  }
+
+  /** POST /api/encounters/:id/void — retract a draft exam opened in error. */
+  @Post(':id/void')
+  @Roles(Role.DOCTOR)
+  voidEncounter(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: VoidEncounterDto,
+  ) {
+    return this.encounters.voidEncounter(user.practiceId, id, user, dto);
   }
 
   /** POST /api/encounters/:id/addenda — append a correction to a signed exam. */

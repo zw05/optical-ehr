@@ -5,7 +5,7 @@ export interface RecentPatient {
   mrn: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   phone: string | null;
   alerts: string | null;
   viewedAt: number;

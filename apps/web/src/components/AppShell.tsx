@@ -1,10 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearSession, getSessionUser, getToken, SessionUser } from '@/lib/api';
 import { usePreferences } from '@/components/PreferencesProvider';
+import {
+  clampSidebarWidth,
+  DEFAULT_SIDEBAR_W,
+  SIDEBAR_MAX_W,
+  SIDEBAR_MIN_W,
+  type SidebarMode,
+} from '@/lib/preferences';
 
 type NavIcon =
   | 'dashboard'
@@ -25,17 +42,17 @@ const NAV_ITEMS: {
   icon: NavIcon;
   roles?: SessionUser['role'][];
 }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/patients', label: 'Patients', icon: 'patients' },
-  { href: '/schedule', label: 'Schedule', icon: 'schedule' },
-  { href: '/exams', label: 'Exams', icon: 'exams', roles: ['TECHNICIAN', 'DOCTOR'] },
-  { href: '/orders', label: 'Orders', icon: 'orders' },
-  { href: '/recalls', label: 'Recalls', icon: 'recalls' },
-  { href: '/insurance', label: 'Insurance', icon: 'insurance' },
-  { href: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['OPTICIAN', 'ADMIN'] },
-  { href: '/audit', label: 'Audit', icon: 'audit', roles: ['ADMIN'] },
-  { href: '/settings', label: 'Settings', icon: 'settings' },
-];
+    { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { href: '/patients', label: 'Patients', icon: 'patients' },
+    { href: '/schedule', label: 'Schedule', icon: 'schedule' },
+    { href: '/exams', label: 'Exams', icon: 'exams', roles: ['TECHNICIAN', 'DOCTOR'] },
+    { href: '/orders', label: 'Orders', icon: 'orders' },
+    { href: '/recalls', label: 'Recalls', icon: 'recalls' },
+    { href: '/insurance', label: 'Insurance', icon: 'insurance' },
+    { href: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['OPTICIAN', 'ADMIN'] },
+    { href: '/audit', label: 'Audit', icon: 'audit', roles: ['ADMIN'] },
+    { href: '/settings', label: 'Settings', icon: 'settings' },
+  ];
 
 function NavIconSvg({ name }: { name: NavIcon }) {
   const props = {
@@ -141,10 +158,129 @@ function NavIconSvg({ name }: { name: NavIcon }) {
   }
 }
 
+function SidebarModeToggleIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {expanded ? (
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M9 4v16" />
+          <path d="M14 9l-3 3 3 3" />
+        </>
+      ) : (
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M9 4v16" />
+          <path d="M12 9l3 3-3 3" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * Drag-to-resize handle for the sidebar. Mutates --sidebar-w directly during
+ * the drag; commits a single preference PATCH on pointerup.
+ */
+function SidebarResizeHandle({
+  width,
+  onCommit,
+}: {
+  width: number;
+  onCommit: (w: number) => void;
+}) {
+  const offsetRef = useRef(0);
+  const latestRef = useRef(width);
+  latestRef.current = width;
+
+  const applyLiveWidth = useCallback((next: number) => {
+    const clamped = clampSidebarWidth(next, window.innerWidth);
+    latestRef.current = clamped;
+    document.documentElement.style.setProperty('--sidebar-w', `${clamped}px`);
+  }, []);
+
+  function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    offsetRef.current = e.clientX - latestRef.current;
+    document.body.dataset.sidebarResizing = 'true';
+  }
+
+  function handlePointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    applyLiveWidth(e.clientX - offsetRef.current);
+  }
+
+  function handlePointerUp(e: PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    delete document.body.dataset.sidebarResizing;
+    onCommit(latestRef.current);
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    let next: number | null = null;
+    if (e.key === 'ArrowLeft') next = latestRef.current - 16;
+    else if (e.key === 'ArrowRight') next = latestRef.current + 16;
+    else if (e.key === 'Home') next = SIDEBAR_MIN_W;
+    else if (e.key === 'End') next = SIDEBAR_MAX_W;
+    if (next === null) return;
+    e.preventDefault();
+    const clamped = clampSidebarWidth(next, window.innerWidth);
+    applyLiveWidth(clamped);
+    onCommit(clamped);
+  }
+
+  function handleDoubleClick() {
+    const clamped = clampSidebarWidth(DEFAULT_SIDEBAR_W, window.innerWidth);
+    applyLiveWidth(clamped);
+    onCommit(clamped);
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize navigation"
+      aria-valuenow={width}
+      aria-valuemin={SIDEBAR_MIN_W}
+      aria-valuemax={SIDEBAR_MAX_W}
+      tabIndex={0}
+      className="sidebar-resize-handle"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onDoubleClick={handleDoubleClick}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
+/** Hover/focus handlers that surface an icon's label while the rail is collapsed. */
+interface RailTipHandlers {
+  onMouseEnter?: (e: MouseEvent<HTMLElement>) => void;
+  onMouseLeave?: () => void;
+  onFocus?: (e: FocusEvent<HTMLElement>) => void;
+  onBlur?: () => void;
+}
+
 function ShellChrome({ children, user }: { children: ReactNode; user: SessionUser }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { prefs, announcement, announce } = usePreferences();
+  const { prefs, update, announcement, announce } = usePreferences();
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const [railTip, setRailTip] = useState<{ label: string; top: number; left: number } | null>(null);
   const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -214,15 +350,65 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
     };
   }, [scheduleIdle, clearIdleTimers]);
 
+  // Re-clamp sidebar width when the viewport shrinks (e.g. laptop docking).
+  useEffect(() => {
+    function onResize() {
+      const clamped = clampSidebarWidth(prefs.sidebar.width, window.innerWidth);
+      document.documentElement.style.setProperty('--sidebar-w', `${clamped}px`);
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [prefs.sidebar.width]);
+
   const visibleNav = NAV_ITEMS.filter(
     (item) => !item.roles || item.roles.includes(user.role) || user.role === 'ADMIN',
   );
 
   const initials = `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase();
+  const sidebarMode = prefs.sidebar.mode;
+  const sidebarWidth = clampSidebarWidth(
+    prefs.sidebar.width,
+    typeof window !== 'undefined' ? window.innerWidth : undefined,
+  );
+
+  // Anchored to the sidebar's right edge so the tip clears the rail entirely.
+  const showRailTip = useCallback((el: HTMLElement, label: string) => {
+    if (!window.matchMedia('(min-width: 701px)').matches) return;
+    const item = el.getBoundingClientRect();
+    const bar = sidebarRef.current?.getBoundingClientRect();
+    setRailTip({
+      label,
+      top: item.top + item.height / 2,
+      left: (bar?.right ?? item.right) + 8,
+    });
+  }, []);
+
+  const railTipProps = useCallback(
+    (label: string): RailTipHandlers => {
+      if (sidebarMode !== 'rail') return {};
+      return {
+        onMouseEnter: (e) => showRailTip(e.currentTarget, label),
+        onMouseLeave: () => setRailTip(null),
+        onFocus: (e) => showRailTip(e.currentTarget, label),
+        onBlur: () => setRailTip(null),
+      };
+    },
+    [showRailTip, sidebarMode],
+  );
 
   function handleLogOff() {
     clearSession();
     router.replace('/login');
+  }
+
+  function toggleSidebarMode() {
+    const next: SidebarMode = sidebarMode === 'expanded' ? 'rail' : 'expanded';
+    void update({ sidebar: { mode: next } });
+    announce(next === 'rail' ? 'Navigation collapsed to icons' : 'Navigation expanded');
+  }
+
+  function commitSidebarWidth(width: number) {
+    void update({ sidebar: { width } });
   }
 
   return (
@@ -230,19 +416,30 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <header className="topbar">
+      <header className="topbar" ref={sidebarRef}>
         <div className="topbar-brand">
           <span className="topbar-brand-mark" aria-hidden>
             O
           </span>
-          Optical EHR
+          <span className="topbar-brand-text">popEHR</span>
+          <button
+            type="button"
+            className="topbar-brand-toggle"
+            onClick={toggleSidebarMode}
+            aria-label={sidebarMode === 'expanded' ? 'Collapse navigation' : 'Expand navigation'}
+            title={sidebarMode === 'expanded' ? 'Collapse navigation' : 'Expand navigation'}
+          >
+            <SidebarModeToggleIcon expanded={sidebarMode === 'expanded'} />
+          </button>
         </div>
         <nav className="topbar-nav" aria-label="Main">
           {visibleNav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.label}
               className={`topbar-item${pathname.startsWith(item.href) ? ' active' : ''}`}
+              {...railTipProps(item.label)}
             >
               <NavIconSvg name={item.icon} />
               <span>{item.label}</span>
@@ -250,11 +447,22 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
           ))}
         </nav>
         <div className="topbar-foot">
-          <button type="button" className="topbar-item" onClick={handleLogOff}>
+          <button
+            type="button"
+            className="topbar-item"
+            aria-label="Log Off"
+            onClick={handleLogOff}
+            {...railTipProps('Log Off')}
+          >
             <NavIconSvg name="logoff" />
             <span>Log Off</span>
           </button>
-          <Link href="/settings" className="topbar-user" title="Open settings">
+          <Link
+            href="/settings"
+            className="topbar-user"
+            aria-label="Open settings"
+            {...railTipProps(`${user.firstName} ${user.lastName}`)}
+          >
             <div className="topbar-avatar" aria-hidden>
               {initials || '?'}
             </div>
@@ -266,7 +474,19 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
             </div>
           </Link>
         </div>
+        {sidebarMode === 'expanded' && (
+          <SidebarResizeHandle width={sidebarWidth} onCommit={commitSidebarWidth} />
+        )}
       </header>
+      {sidebarMode === 'rail' && railTip && (
+        <div
+          className="sidebar-tooltip"
+          role="presentation"
+          style={{ top: railTip.top, left: railTip.left }}
+        >
+          {railTip.label}
+        </div>
+      )}
       <main id="main-content" className="main" tabIndex={-1}>
         {children}
       </main>

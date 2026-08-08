@@ -10,7 +10,7 @@ interface PatientBannerProps {
   patient: {
     firstName: string;
     lastName: string;
-    dateOfBirth: string;
+    dateOfBirth: string | null;
     phone: string | null;
     email: string | null;
     insurances?: InsuranceInfo[];
@@ -27,16 +27,19 @@ interface PatientBannerProps {
   onRecallDateChange: (value: string) => void;
 }
 
-function ageFromDob(dob: string): number {
+function ageFromDob(dob: string | null): string {
+  if (!dob) return '—';
   const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return '—';
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age -= 1;
-  return age;
+  return String(age);
 }
 
-function formatDob(dob: string): string {
+function formatDob(dob: string | null): string {
+  if (!dob) return '—';
   const d = new Date(dob);
   if (Number.isNaN(d.getTime())) return dob;
   return d.toLocaleDateString();

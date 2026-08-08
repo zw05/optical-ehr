@@ -19,8 +19,9 @@ export class CreatePatientDto {
   @MaxLength(100)
   lastName!: string;
 
+  @IsOptional()
   @IsDateString()
-  dateOfBirth!: string;
+  dateOfBirth?: string;
 
   @IsOptional()
   @IsEnum(Sex)
@@ -53,14 +54,6 @@ export class CreatePatientDto {
   @IsOptional()
   @IsString()
   preferredContact?: string;
-
-  @IsOptional()
-  @IsString()
-  guardianName?: string;
-
-  @IsOptional()
-  @IsString()
-  guardianPhone?: string;
 
   @IsOptional()
   @IsString()

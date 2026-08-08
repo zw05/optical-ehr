@@ -15,7 +15,13 @@ import type {
   Density,
   FontFamilyPref,
   FontScale,
+  SidebarMode,
   ThemePreference,
+} from '@/lib/preferences';
+import {
+  DEFAULT_SIDEBAR_W,
+  SIDEBAR_MAX_W,
+  SIDEBAR_MIN_W,
 } from '@/lib/preferences';
 
 type SettingsTab = 'appearance' | 'dashboard' | 'exam' | 'printing' | 'accessibility';
@@ -120,6 +126,12 @@ const LANDING_OPTIONS = [
   { value: '/exams', label: 'Exams' },
 ];
 
+const SIDEBAR_MODE_OPTIONS: { value: SidebarMode; label: string; help: string }[] = [
+  { value: 'expanded', label: 'Expanded', help: 'Full labels always visible' },
+  { value: 'rail', label: 'Icons only', help: 'Compact icon rail' },
+  { value: 'auto', label: 'Auto-compact', help: 'Opens on hover or focus' },
+];
+
 export default function SettingsPage() {
   const { prefs, update, reset, saving } = usePreferences();
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
@@ -173,6 +185,8 @@ export default function SettingsPage() {
             density={prefs.appearance.density}
             fontFamily={prefs.appearance.fontFamily}
             landingRoute={prefs.dashboard.landingRoute}
+            sidebarMode={prefs.sidebar.mode}
+            sidebarWidth={prefs.sidebar.width}
             onChange={patch}
           />
         )}
@@ -230,6 +244,8 @@ function AppearanceSection({
   density,
   fontFamily,
   landingRoute,
+  sidebarMode,
+  sidebarWidth,
   onChange,
 }: {
   theme: ThemePreference;
@@ -237,6 +253,8 @@ function AppearanceSection({
   density: Density;
   fontFamily: FontFamilyPref;
   landingRoute: string;
+  sidebarMode: SidebarMode;
+  sidebarWidth: number;
   onChange: (p: Parameters<ReturnType<typeof usePreferences>['update']>[0]) => Promise<void>;
 }) {
   return (
@@ -303,6 +321,58 @@ function AppearanceSection({
             />
             Compact
           </label>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-label">Sidebar</div>
+          <span className="settings-row-help">Desktop navigation layout</span>
+        </div>
+        <div className="settings-choices">
+          {SIDEBAR_MODE_OPTIONS.map((o) => (
+            <label key={o.value} className="exam-choice" title={o.help}>
+              <input
+                type="radio"
+                name="sidebarMode"
+                checked={sidebarMode === o.value}
+                onChange={() => onChange({ sidebar: { mode: o.value } })}
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-label">Sidebar width</div>
+          <span className="settings-row-help">
+            {sidebarMode === 'rail'
+              ? 'Not used while icons-only is selected'
+              : `${sidebarWidth}px (drag the sidebar edge to resize)`}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '14rem' }}>
+          <input
+            type="range"
+            min={SIDEBAR_MIN_W}
+            max={SIDEBAR_MAX_W}
+            step={4}
+            value={sidebarWidth}
+            disabled={sidebarMode === 'rail'}
+            aria-label="Sidebar width in pixels"
+            onChange={(e) => onChange({ sidebar: { width: Number(e.target.value) } })}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="secondary"
+            disabled={sidebarMode === 'rail' || sidebarWidth === DEFAULT_SIDEBAR_W}
+            onClick={() => onChange({ sidebar: { width: DEFAULT_SIDEBAR_W } })}
+          >
+            Reset
+          </button>
         </div>
       </div>
 

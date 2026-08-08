@@ -50,7 +50,7 @@ export interface EyeTable {
 export interface ReportContent {
   title: string;
   practice: { name: string; phone?: string | null; address?: string | null; logoUrl?: string | null };
-  patient: { name: string; mrn: string; dateOfBirth: string };
+  patient: { name: string; mrn: string; dateOfBirth: string | null };
   provider?: { name: string; licenseNumber?: string | null; npi?: string | null };
   issuedAt?: string;
   expiresAt?: string;
@@ -74,7 +74,7 @@ const EYE_COL_WIDTH = 36;
 const BOTTOM_BAND = 72;
 
 /** Formats an ISO date string (YYYY-MM-DD) according to the layout preference. */
-export function formatReportDate(isoDate: string | undefined, format: ReportLayout['dateFormat']): string {
+export function formatReportDate(isoDate: string | null | undefined, format: ReportLayout['dateFormat']): string {
   if (!isoDate) return '';
   if (!format || format === 'ISO') return isoDate;
   const [y, m, d] = isoDate.split('-').map(Number);
@@ -199,9 +199,8 @@ export class PdfRenderer {
 
       // Patient / provider block
       doc.fontSize(baseFont).font(regular);
-      doc.text(
-        `Patient: ${content.patient.name}   MRN: ${content.patient.mrn}   DOB: ${patientDob || content.patient.dateOfBirth}`,
-      );
+      const dobLabel = patientDob || content.patient.dateOfBirth || '—';
+      doc.text(`Patient: ${content.patient.name}   MRN: ${content.patient.mrn}   DOB: ${dobLabel}`);
       if (content.provider) {
         const showCreds = layout.showPrescriberCredentials !== false;
         const credentials = showCreds

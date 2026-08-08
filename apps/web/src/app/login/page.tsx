@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="login-wrap">
       <div className="card login-card">
-        <h1>Optical EHR</h1>
+        <h1>popEHR</h1>
         <p className="muted">Staff sign-in. All access is logged.</p>
         <form onSubmit={handleSubmit}>
           <div className="field">

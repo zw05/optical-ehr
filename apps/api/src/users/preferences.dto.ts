@@ -31,6 +31,18 @@ class AppearanceDto {
   fontFamily?: 'system' | 'serif' | 'dyslexic';
 }
 
+class SidebarDto {
+  @IsOptional()
+  @IsIn(['expanded', 'rail', 'auto'])
+  mode?: 'expanded' | 'rail' | 'auto';
+
+  @IsOptional()
+  @IsInt()
+  @Min(180)
+  @Max(400)
+  width?: number;
+}
+
 class ExamDto {
   @IsOptional()
   @IsString()
@@ -132,6 +144,12 @@ export class UpdatePreferencesDto {
   @ValidateNested()
   @Type(() => AppearanceDto)
   appearance?: AppearanceDto;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SidebarDto)
+  sidebar?: SidebarDto;
 
   @IsOptional()
   @IsObject()

@@ -9,7 +9,7 @@ export interface PatientSuggestion {
   mrn: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   phone: string | null;
   email: string | null;
   alerts: string | null;
@@ -166,7 +166,8 @@ export default function PatientSearchBox({ value, onChange, onSubmit, onSelect }
                   {p.alerts ? <span className="badge danger">{p.alerts}</span> : null}
                 </span>
                 <span className="search-suggestion-meta">
-                  {p.mrn} · {new Date(p.dateOfBirth).toLocaleDateString()}
+                  {p.mrn}
+                  {p.dateOfBirth ? ` · ${new Date(p.dateOfBirth).toLocaleDateString()}` : ''}
                   {p.phone ? ` · ${p.phone}` : ''}
                 </span>
               </button>

@@ -16,6 +16,7 @@ const PREFS_BOOT_SCRIPT = `
     var p = JSON.parse(raw);
     var a = (p && p.appearance) || {};
     var x = (p && p.accessibility) || {};
+    var s = (p && p.sidebar) || {};
     var root = document.documentElement;
     if (a.theme) root.setAttribute('data-theme', a.theme);
     if (a.fontScale) root.setAttribute('data-font-scale', a.fontScale);
@@ -24,6 +25,16 @@ const PREFS_BOOT_SCRIPT = `
     root.setAttribute('data-reduced-motion', x.reducedMotion ? 'on' : 'off');
     root.setAttribute('data-focus-ring', x.boldFocusRing ? 'bold' : 'default');
     root.setAttribute('data-underline-links', x.underlineLinks ? 'on' : 'off');
+    var mode = s.mode;
+    if (mode !== 'expanded' && mode !== 'rail' && mode !== 'auto') mode = 'expanded';
+    root.setAttribute('data-sidebar', mode);
+    var w = Math.round(Number(s.width));
+    if (!w || isNaN(w)) w = 224;
+    if (w < 180) w = 180;
+    if (w > 400) w = 400;
+    var ceiling = Math.floor(window.innerWidth / 3);
+    if (ceiling >= 180 && w > ceiling) w = ceiling;
+    root.style.setProperty('--sidebar-w', w + 'px');
   } catch (e) {}
 })();
 `;

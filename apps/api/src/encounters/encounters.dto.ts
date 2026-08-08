@@ -6,13 +6,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 
 /** Query params for GET /encounters — the exams dashboard list. */
 export class ListEncountersDto {
   @IsOptional()
-  @IsIn(['recent', 'unfinished', 'finalized'])
-  tab?: 'recent' | 'unfinished' | 'finalized';
+  @IsIn(['recent', 'unfinished', 'finalized', 'voided'])
+  tab?: 'recent' | 'unfinished' | 'finalized' | 'voided';
 
   @IsOptional()
   @IsString()
@@ -100,4 +101,10 @@ export class UpdateEncounterDto {
 export class AddAddendumDto {
   @IsString()
   text!: string;
+}
+
+export class VoidEncounterDto {
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
 }
