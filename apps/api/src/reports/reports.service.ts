@@ -198,17 +198,39 @@ export class ReportsService {
    * Accepts PNG/JPEG up to 1 MB and returns the blob path to embed in layout.
    */
   async uploadLogo(fileName: string, contentType: string, data: Buffer) {
+    return this.uploadTemplateImage('logos', 'logo', fileName, contentType, data);
+  }
+
+  /**
+   * Stores a provider signature image for Rx print templates.
+   * Accepts PNG/JPEG up to 1 MB and returns the blob path to embed in layout.
+   */
+  async uploadSignature(fileName: string, contentType: string, data: Buffer) {
+    return this.uploadTemplateImage('signatures', 'signature', fileName, contentType, data);
+  }
+
+  private async uploadTemplateImage(
+    container: 'logos' | 'signatures',
+    kind: 'logo' | 'signature',
+    fileName: string,
+    contentType: string,
+    data: Buffer,
+  ) {
     const normalized = contentType.toLowerCase();
     if (!ALLOWED_LOGO_TYPES.has(normalized)) {
-      throw new BadRequestException('Logo must be a PNG or JPEG image');
+      throw new BadRequestException(`${kind === 'logo' ? 'Logo' : 'Signature'} must be a PNG or JPEG image`);
     }
     if (data.length === 0) throw new BadRequestException('Empty file');
     if (data.length > MAX_LOGO_BYTES) {
-      throw new BadRequestException('Logo exceeds 1 MB limit');
+      throw new BadRequestException(`${kind === 'logo' ? 'Logo' : 'Signature'} exceeds 1 MB limit`);
     }
     const ext = normalized.includes('png') ? 'png' : 'jpg';
-    const safeName = fileName.trim() || `logo.${ext}`;
-    const stored = await this.blobs.upload('logos', safeName.endsWith(`.${ext}`) ? safeName : `${safeName}.${ext}`, data);
+    const safeName = fileName.trim() || `${kind}.${ext}`;
+    const stored = await this.blobs.upload(
+      container,
+      safeName.endsWith(`.${ext}`) ? safeName : `${safeName}.${ext}`,
+      data,
+    );
     return { blobPath: stored.blobPath, sizeBytes: stored.sizeBytes };
   }
 
@@ -242,8 +264,8 @@ export class ReportsService {
 
     const layout = template.layout as unknown as ReportLayout;
     const content = this.buildPrescriptionContent(rx);
-    const withLogo = await this.attachLogo(layout, content);
-    const pdf = await this.renderer.render(layout, withLogo);
+    const withAssets = await this.attachPrintAssets(layout, content);
+    const pdf = await this.renderer.render(layout, withAssets);
 
     const stored = await this.blobs.upload('reports', `${kind}-${rx.patient.mrn}-v${rx.version}.pdf`, pdf);
     const report = await this.prisma.generatedReport.create({
@@ -298,8 +320,8 @@ export class ReportsService {
     const practice = await this.prisma.practice.findUnique({ where: { id: practiceId } });
     if (!practice) throw new NotFoundException('Practice not found');
     const content = samplePrescriptionContent(practice, kind);
-    const withLogo = await this.attachLogo(layout, content);
-    return this.renderer.render(layout, withLogo);
+    const withAssets = await this.attachPrintAssets(layout, content);
+    return this.renderer.render(layout, withAssets);
   }
 
   /**
@@ -319,17 +341,28 @@ export class ReportsService {
   }
 
   /**
-   * Loads logo bytes from layout.logoBlobPath when showLogo is set.
-   * Missing or unreadable blobs degrade to no logo rather than failing the print.
+   * Loads logo and signature image bytes from layout blob paths when set.
+   * Missing or unreadable blobs degrade to no image rather than failing the print.
    */
-  private async attachLogo(layout: ReportLayout, content: ReportContent): Promise<ReportContent> {
-    if (!layout.showLogo || !layout.logoBlobPath) return content;
-    try {
-      const logoBytes = await this.blobs.download('logos', layout.logoBlobPath);
-      return { ...content, logoBytes };
-    } catch {
-      return content;
+  private async attachPrintAssets(layout: ReportLayout, content: ReportContent): Promise<ReportContent> {
+    let next = content;
+    if (layout.showLogo && layout.logoBlobPath) {
+      try {
+        const logoBytes = await this.blobs.download('logos', layout.logoBlobPath);
+        next = { ...next, logoBytes };
+      } catch {
+        // keep content without logo
+      }
     }
+    if (layout.signatureLine !== false && layout.signatureBlobPath) {
+      try {
+        const signatureBytes = await this.blobs.download('signatures', layout.signatureBlobPath);
+        next = { ...next, signatureBytes };
+      } catch {
+        // keep content without signature image
+      }
+    }
+    return next;
   }
 
   /**

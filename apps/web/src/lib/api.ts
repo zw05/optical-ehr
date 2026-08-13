@@ -20,13 +20,19 @@ export interface SessionUser {
 const TOKEN_KEY = 'ehr.token';
 const USER_KEY = 'ehr.user';
 
-/** Returns the JWT access token from sessionStorage, or null if signed out. */
+function canUseSessionStorage(): boolean {
+  return typeof window !== 'undefined' && typeof sessionStorage !== 'undefined';
+}
+
+/** Returns the JWT access token from sessionStorage, or null if signed out / SSR. */
 export function getToken(): string | null {
+  if (!canUseSessionStorage()) return null;
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
-/** Returns the cached user profile, or null if not signed in. */
+/** Returns the cached user profile, or null if not signed in / SSR. */
 export function getSessionUser(): SessionUser | null {
+  if (!canUseSessionStorage()) return null;
   const raw = sessionStorage.getItem(USER_KEY);
   return raw ? (JSON.parse(raw) as SessionUser) : null;
 }
@@ -36,6 +42,7 @@ export function getSessionUser(): SessionUser | null {
  * Optionally seeds the preferences cache from the login payload.
  */
 export function setSession(token: string, user: SessionUser, preferences?: UserPreferences) {
+  if (!canUseSessionStorage()) return;
   sessionStorage.setItem(TOKEN_KEY, token);
   sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   if (preferences) {
@@ -47,8 +54,10 @@ export function setSession(token: string, user: SessionUser, preferences?: UserP
 
 /** Clears the session (sign out). */
 export function clearSession() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(USER_KEY);
+  if (canUseSessionStorage()) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+  }
   clearRecentPatients();
 }
 

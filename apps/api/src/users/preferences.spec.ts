@@ -41,4 +41,24 @@ describe('applyPreferencePatch', () => {
     expect(next.appearance.theme).toBe('dark');
     expect(next.appearance.fontScale).toBe('lg');
   });
+
+  it('ignores undefined DTO fields so Nest class instances do not wipe siblings', () => {
+    const current = structuredClone(DEFAULT_PREFERENCES);
+    current.appearance.theme = 'slate';
+    current.appearance.fontScale = 'lg';
+    // Simulate Nest AppearanceDto with unset fields present as undefined.
+    const nestLikePatch = {
+      appearance: {
+        theme: 'forest',
+        fontScale: undefined,
+        density: undefined,
+        fontFamily: undefined,
+      },
+    };
+    const next = applyPreferencePatch(current, nestLikePatch as never);
+    expect(next.appearance.theme).toBe('forest');
+    expect(next.appearance.fontScale).toBe('lg');
+    expect(next.appearance.density).toBe('comfortable');
+    expect(next.appearance.fontFamily).toBe('system');
+  });
 });

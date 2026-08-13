@@ -43,6 +43,8 @@ interface ReportLayoutEditor {
   logoWidth?: number;
   signatureLine?: boolean;
   signatureLabel?: string;
+  signatureBlobPath?: string;
+  signatureWidth?: number;
   paperSize?: 'LETTER' | 'A4';
   margin?: number;
   baseFontSize?: number;
@@ -971,6 +973,47 @@ function AdminPrintTemplateEditor() {
     }
   }
 
+  async function onSignatureSelected(file: File | null) {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      setStatus('Signature must be a PNG or JPEG');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setStatus('Signature must be 1 MB or smaller');
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      const uploaded = await api<{ blobPath: string }>('/reports/templates/signature', {
+        method: 'POST',
+        body: { fileName: file.name, contentType: file.type, dataBase64 },
+      });
+      setLayout((prev) => ({
+        ...prev,
+        signatureLine: true,
+        signatureBlobPath: uploaded.blobPath,
+        signatureWidth: prev.signatureWidth ?? 140,
+      }));
+      setStatus('Signature uploaded — preview or publish to apply');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Signature upload failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function clearSignature() {
+    setLayout((prev) => {
+      const next = { ...prev };
+      delete next.signatureBlobPath;
+      return next;
+    });
+    setStatus('Signature cleared — preview or publish to apply');
+  }
+
   return (
     <div className="settings-section" style={{ marginTop: '1rem' }}>
       <h2>Practice Rx print templates</h2>
@@ -1181,6 +1224,37 @@ function AdminPrintTemplateEditor() {
                 value={layout.signatureLabel ?? ''}
                 onChange={(e) => setField('signatureLabel', e.target.value)}
               />
+            </div>
+            <div className="field">
+              <label htmlFor="signatureWidth">Signature width (pt)</label>
+              <input
+                id="signatureWidth"
+                type="number"
+                min={40}
+                max={220}
+                value={layout.signatureWidth ?? 140}
+                onChange={(e) => setField('signatureWidth', Number(e.target.value))}
+              />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="signatureFile">Provider signature image</label>
+              <input
+                id="signatureFile"
+                type="file"
+                accept="image/png,image/jpeg"
+                disabled={busy}
+                onChange={(e) => onSignatureSelected(e.target.files?.[0] ?? null)}
+              />
+              {layout.signatureBlobPath && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.35rem' }}>
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    Uploaded: {layout.signatureBlobPath}
+                  </span>
+                  <button type="button" className="secondary" disabled={busy} onClick={clearSignature}>
+                    Clear
+                  </button>
+                </div>
+              )}
             </div>
             <div className="field">
               <label htmlFor="logoWidth">Logo width (pt)</label>

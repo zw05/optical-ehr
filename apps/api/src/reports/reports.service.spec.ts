@@ -184,4 +184,11 @@ describe('ReportsService archive / default guards', () => {
       service.uploadLogo('logo.gif', 'image/gif', Buffer.from('gif')),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('rejects signature uploads that are not PNG/JPEG', async () => {
+    const { service } = createService();
+    await expect(
+      service.uploadSignature('sig.gif', 'image/gif', Buffer.from('gif')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

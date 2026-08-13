@@ -175,7 +175,12 @@ export function applyPreferencePatch(
   for (const key of SECTION_KEYS) {
     const section = patch[key];
     if (!section || typeof section !== 'object') continue;
-    Object.assign(next[key], section);
+    // Skip undefined so Nest DTO class fields do not wipe sibling keys.
+    for (const [field, value] of Object.entries(section)) {
+      if (value !== undefined) {
+        (next[key] as Record<string, unknown>)[field] = value;
+      }
+    }
   }
   return mergePreferences(next);
 }

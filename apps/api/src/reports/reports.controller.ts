@@ -96,6 +96,17 @@ export class ReportsController {
     return this.reports.uploadLogo(dto.fileName, dto.contentType, data);
   }
 
+  /**
+   * POST /api/reports/templates/signature — upload a PNG/JPEG provider signature
+   * (admin only). Returns the blob path to store in layout.signatureBlobPath.
+   */
+  @Post('templates/signature')
+  @Roles(Role.ADMIN)
+  uploadSignature(@Body() dto: UploadLogoDto) {
+    const data = Buffer.from(dto.dataBase64, 'base64');
+    return this.reports.uploadSignature(dto.fileName, dto.contentType, data);
+  }
+
   /** POST /api/reports/templates/:id/versions — publish an edited layout. */
   @Post('templates/:id/versions')
   @Roles(Role.ADMIN)

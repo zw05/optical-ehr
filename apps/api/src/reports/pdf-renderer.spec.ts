@@ -119,6 +119,13 @@ describe('PdfRenderer', () => {
     expect(pdf.length).toBeGreaterThan(500);
   });
 
+  it('renders with a signature image above the signature line', async () => {
+    const layout: ReportLayout = { signatureLine: true, signatureWidth: 100 };
+    const pdf = await renderer.render(layout, { ...sampleContent, signatureBytes: TINY_PNG });
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdf.length).toBeGreaterThan(500);
+  });
+
   it('survives a corrupt logo buffer without throwing', async () => {
     const layout: ReportLayout = { showLogo: true };
     const pdf = await renderer.render(layout, {
