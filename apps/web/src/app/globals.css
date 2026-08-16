@@ -2615,6 +2615,146 @@ button.danger {
   clip: rect(0, 0, 0, 0);
 }
 
+/* Attached documents (patient chart panel + exam tab) */
+.doc-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.doc-card:last-child {
+  margin-bottom: 0;
+}
+
+.doc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+/* The file name doubles as the preview trigger, styled as a link not a button. */
+.doc-card-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.doc-card-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+}
+
+/* Transcribed OD/OS values: tabular so mis-keyed powers are easy to spot. */
+.doc-card-values {
+  margin: 0.25rem 0 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+
+.doc-card-actions {
+  margin-bottom: 0;
+  gap: 0.5rem;
+}
+
+.doc-upload-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-hint {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.doc-transcribe {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.doc-transcribe legend {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.doc-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-picker h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.doc-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.doc-picker-row:last-child {
+  border-bottom: none;
+}
+
+.doc-viewer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.doc-viewer-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+/* Images shrink to their natural height rather than filling the frame. */
+img.doc-viewer-frame {
+  height: auto;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+@media (max-width: 700px) {
+  .doc-viewer-frame {
+    height: 55vh;
+  }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

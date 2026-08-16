@@ -862,9 +862,10 @@ export const EXAM_TABS: ExamTab[] = [
     sections: [],
   },
   {
+    // Rendered by the AttachedDocs component, not the generic field renderer:
+    // its content lives in Document/EncounterDocument rows, not clinicalData.
     key: 'attachedDocs',
     label: 'Attached Docs',
-    stub: true,
     sections: [],
   },
 ];

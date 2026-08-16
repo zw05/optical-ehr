@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
+import { AttachedDocs } from '@/components/exam/AttachedDocs';
 import { FieldRenderer, markAllRosNegative } from '@/components/exam/FieldRenderer';
 import { PatientBanner } from '@/components/exam/PatientBanner';
 import { TabStrip } from '@/components/TabStrip';
@@ -379,6 +380,17 @@ export default function ExamPage() {
     const data = (encounter!.clinicalData[tab.key] ?? {}) as Record<string, unknown>;
     if (tab.stub) {
       return <p className="muted">This section is coming soon.</p>;
+    }
+    // Attached docs are Document rows, not clinicalData — own component.
+    if (tab.key === 'attachedDocs') {
+      return (
+        <AttachedDocs
+          encounterId={encounter!.id}
+          patientId={encounter!.patient.id}
+          readOnly={readOnly}
+          onCopyRx={(row) => setSectionField('refractionCl', 'currentRx', row)}
+        />
+      );
     }
     return (
       <>

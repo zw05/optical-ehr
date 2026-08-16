@@ -74,6 +74,7 @@ model User {
   auditEvents      AuditEvent[]
   appointments     Appointment[]  @relation("Provider")
   tasksAssigned    Task[]         @relation("Assignee")
+  documentLinks    EncounterDocument[]
 }
 
 // ---------- Patient chart ----------
@@ -338,6 +339,7 @@ model Encounter {
   addenda       Addendum[]
   prescriptions Prescription[]
   reports       GeneratedReport[]
+  documentLinks EncounterDocument[]
 
   @@index([practiceId, patientId, createdAt])
 }
@@ -402,6 +404,26 @@ model Prescription {
 
 // ---------- Documents & reports ----------
 
+/// What a scanned/imported file actually is. Drives which structured fields the
+/// UI offers and which documents can be pulled forward into an exam.
+enum DocumentKind {
+  EXTERNAL_RECORD // outside chart notes, referral packets
+  EXTERNAL_RX // spectacle/CL prescription written by another doctor
+  KERATOMETRY // K readings from an outside device or provider
+  REFERRAL_LETTER
+  LAB_IMAGING
+  INSURANCE_CARD
+  OTHER
+}
+
+/// Values transcribed or OCR'd off a document are never trusted clinically
+/// until a technician or doctor confirms them against the source image.
+enum DocumentReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  REJECTED
+}
+
 model Document {
   id          String   @id @default(uuid())
   patientId   String
@@ -411,11 +433,42 @@ model Document {
   blobPath    String // container-relative path in Azure Blob Storage
   sha256      String
   sizeBytes   Int
-  category    String? // insurance-card, external-record, scan...
+  category    String? // free-text label kept for pre-DocumentKind rows
+  kind        DocumentKind @default(OTHER)
+  externalProvider String? // clinic/doctor the record came from
+  documentDate DateTime? // date printed on the paper, not the upload date
+  // Structured values read off the document, shape per kind:
+  // EXTERNAL_RX  { od: {sphere,cylinder,axis,add}, os: {...}, pd, notes }
+  // KERATOMETRY  { od: {k1,k2,kAxis}, os: {...}, notes }
+  // Validated in DocumentsService; only meaningful once reviewStatus = REVIEWED.
+  extractedData Json?
+  reviewStatus DocumentReviewStatus @default(PENDING_REVIEW)
+  reviewedById String?
+  reviewedAt   DateTime?
   uploadedById String?
   createdAt   DateTime @default(now())
 
+  encounterLinks EncounterDocument[]
+
   @@index([patientId])
+  @@index([patientId, kind])
+}
+
+/// Join between a chart document and the visits it is relevant to. A single
+/// scanned outside Rx is uploaded once and referenced by every exam that needs
+/// it, mirroring how one photocopy sits in a paper folder across visits.
+model EncounterDocument {
+  id          String    @id @default(uuid())
+  encounterId String
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  linkedById  String?
+  linkedBy    User?     @relation(fields: [linkedById], references: [id])
+  linkedAt    DateTime  @default(now())
+
+  @@unique([encounterId, documentId])
+  @@index([documentId])
 }
 
 model ReportTemplate {

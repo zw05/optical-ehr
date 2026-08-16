@@ -230,11 +230,25 @@ State machine: **DRAFT** (editable) → **FINALIZED** (locked, printable, ordera
 
 ### `DocumentsService` (`documents/documents.service.ts`)
 
+Documents belong to the **chart**, not to a single visit. `EncounterDocument`
+links one document to every exam it is relevant to, so a scanned outside Rx is
+uploaded once and referenced across visits. Unlinking never deletes the file.
+
+`Document.kind` classifies the import (`EXTERNAL_RX`, `KERATOMETRY`,
+`INSURANCE_CARD`, …) and `extractedData` holds values transcribed off the page
+(`{ od, os, kUnit, pd, notes }`). Those values start at `PENDING_REVIEW` and
+must be attested by a technician or doctor before anything copies them into an
+exam; editing them resets the attestation.
+
 | Method | What it does |
 | ------ | ------------ |
-| `upload(...)` | Patient file attachment (insurance card scan, etc.). |
-| `list(...)` | Metadata list for the chart. |
+| `upload(...)` | Patient file attachment; optionally links it to an encounter in the same transaction. |
+| `list(...)` | Metadata list for the chart. Transcribed clinical values are withheld from non-clinical roles. |
+| `listForEncounter(...)` | Documents attached to one exam (Attached Docs tab). |
 | `getContent(...)` | Download/view one file. |
+| `update(...)` | Reclassify or correct transcribed values; bytes are never replaced. |
+| `link(...)` / `unlink(...)` | Attach/detach a chart document to an exam. Blocked on signed and voided encounters. |
+| `review(...)` | Clinical sign-off that transcribed values match the source image. |
 
 | Route | Description |
 | ----- | ----------- |
@@ -243,9 +257,14 @@ State machine: **DRAFT** (editable) → **FINALIZED** (locked, printable, ordera
 | `POST /api/reports/templates/:id/versions` | Publish layout version |
 | `POST /api/reports/prescriptions/:id` | Generate & return Rx PDF |
 | `GET /api/reports/:id/content` | Re-download PDF |
-| `POST /api/documents` | Upload attachment (base64 body) |
-| `GET /api/documents/patient/:patientId` | List attachments |
+| `POST /api/documents` | Upload attachment (base64 body, optional `encounterId`) |
+| `GET /api/documents/patient/:patientId` | List attachments (optional `?kind=`) |
+| `GET /api/documents/encounter/:encounterId` | List an exam's attached docs |
 | `GET /api/documents/:id/content` | Download attachment |
+| `PATCH /api/documents/:id` | Reclassify / correct transcribed values |
+| `PATCH /api/documents/:id/review` | Mark reviewed or rejected |
+| `POST /api/documents/:id/link` | Attach to an encounter |
+| `DELETE /api/documents/:id/link/:encounterId` | Detach from an encounter |
 
 ---
 

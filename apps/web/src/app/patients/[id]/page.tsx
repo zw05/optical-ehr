@@ -1,10 +1,11 @@
 'use client';
 
-/** Single patient chart: demographics, insurance, exams, prescriptions, print Rx PDF. */
+/** Single patient chart: demographics, insurance, exams, prescriptions, documents, print Rx PDF. */
 import { useCallback, useEffect, useState, FormEvent, ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BackButton from '@/components/BackButton';
+import { PatientDocumentsPanel } from '@/components/documents/PatientDocumentsPanel';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { api, getSessionUser } from '@/lib/api';
 import { recordRecentPatient } from '@/lib/recentPatients';
@@ -681,6 +682,15 @@ export default function PatientChartPage() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section className="card">
+        <h2>Documents</h2>
+        <PatientDocumentsPanel
+          patientId={patientId}
+          canUpload={canEditPatient}
+          isClinical={isClinical}
+        />
       </section>
 
       {patient.recalls.length > 0 && (
