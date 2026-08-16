@@ -107,5 +107,66 @@ export async function api<T = unknown>(
   if (response.headers.get('content-type')?.includes('application/pdf')) {
     return (await response.blob()) as T;
   }
+  const ct = response.headers.get('content-type') ?? '';
+  if (
+    ct.startsWith('image/') ||
+    ct.includes('spreadsheetml') ||
+    ct.includes('octet-stream')
+  ) {
+    return (await response.blob()) as T;
+  }
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
+}
+
+export async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+export async function downloadApiFile(path: string, filename: string) {
+  const blob = await api<Blob>(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function apiUpload<T = unknown>(path: string, file: File, field = 'file'): Promise<T> {
+  const token = getToken();
+  const body = new FormData();
+  body.append(field, file);
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+  if (response.status === 401) {
+    clearSession();
+    window.location.href = '/login';
+    throw new ApiError(401, 'Session expired');
+  }
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const data = await response.json();
+      message = Array.isArray(data.message) ? data.message.join('; ') : (data.message ?? message);
+    } catch {
+      // keep statusText
+    }
+    throw new ApiError(response.status, message);
+  }
   return (await response.json()) as T;
 }

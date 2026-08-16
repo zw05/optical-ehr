@@ -15,6 +15,7 @@ interface Item {
   size: string | null;
   quantity: number;
   retail: string | null;
+  reorderPoint: number | null;
 }
 
 export default function InventoryPage() {
@@ -176,6 +177,11 @@ export default function InventoryPage() {
                   </td>
                   <td>
                     {item.quantity === 0 ? <span className="badge danger">0</span> : item.quantity}
+                    {item.reorderPoint != null && item.quantity <= item.reorderPoint ? (
+                      <span className="badge warning" style={{ marginLeft: 6 }}>
+                        Low
+                      </span>
+                    ) : null}
                   </td>
                   <td>{item.retail ? `$${Number(item.retail).toFixed(2)}` : '—'}</td>
                   <td>

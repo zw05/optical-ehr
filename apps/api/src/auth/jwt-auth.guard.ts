@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { JwtPayload } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 /** Express request with the decoded token claims attached after authentication. */
 export interface AuthenticatedRequest extends Request {
@@ -19,6 +20,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -42,6 +44,13 @@ export class JwtAuthGuard implements CanActivate {
       request.user = await this.jwt.verifyAsync<JwtPayload>(header.slice(7));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
+    }
+    const staff = await this.prisma.user.findUnique({
+      where: { id: request.user.sub },
+      select: { isActive: true },
+    });
+    if (!staff?.isActive) {
+      throw new UnauthorizedException('Account is inactive');
     }
     return true;
   }

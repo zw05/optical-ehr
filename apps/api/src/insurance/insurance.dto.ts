@@ -14,8 +14,13 @@ export class CreateInsuranceDto {
   @IsUUID()
   patientId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  acceptedPayerId?: string;
+
+  @IsOptional()
   @IsString()
-  payerName!: string;
+  payerName?: string;
 
   @IsOptional()
   @IsString()
@@ -73,7 +78,7 @@ export class UpdateInsuranceDto extends CreateInsuranceDto {
 
   @IsOptional()
   @IsString()
-  declare payerName: string;
+  declare payerName?: string;
 
   @IsOptional()
   @IsString()

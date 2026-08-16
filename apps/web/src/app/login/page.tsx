@@ -1,7 +1,7 @@
 'use client';
 
 /** Staff sign-in; stores JWT in sessionStorage and redirects to the dashboard. */
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { setSession, SessionUser } from '@/lib/api';
 
@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="login-wrap">
       <div className="card login-card">
-        <h1>popEHR</h1>
+        <LoginBrand />
         <p className="muted">Staff sign-in. All access is logged.</p>
         <form onSubmit={handleSubmit}>
           <div className="field">
@@ -77,4 +77,17 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+function LoginBrand() {
+  const [name, setName] = useState('popEHR');
+  useEffect(() => {
+    fetch('/api/practice/branding')
+      .then((r) => r.json())
+      .then((d: { name?: string }) => {
+        if (d.name) setName(d.name);
+      })
+      .catch(() => undefined);
+  }, []);
+  return <h1>{name}</h1>;
 }

@@ -13,7 +13,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { clearSession, getSessionUser, getToken, SessionUser } from '@/lib/api';
+import { clearSession, getSessionUser, getToken, SessionUser, api } from '@/lib/api';
 import { usePreferences } from '@/components/PreferencesProvider';
 import {
   clampSidebarWidth,
@@ -48,7 +48,6 @@ const NAV_ITEMS: {
     { href: '/exams', label: 'Exams', icon: 'exams', roles: ['TECHNICIAN', 'DOCTOR'] },
     { href: '/orders', label: 'Orders', icon: 'orders' },
     { href: '/recalls', label: 'Recalls', icon: 'recalls' },
-    { href: '/insurance', label: 'Insurance', icon: 'insurance' },
     { href: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['OPTICIAN', 'ADMIN'] },
     { href: '/audit', label: 'Audit', icon: 'audit', roles: ['ADMIN'] },
     { href: '/settings', label: 'Settings', icon: 'settings' },
@@ -282,6 +281,8 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
   const sidebarRef = useRef<HTMLElement | null>(null);
   const [railTip, setRailTip] = useState<{ label: string; top: number; left: number } | null>(null);
   const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null);
+  const [practiceName, setPracticeName] = useState('Optical EHR');
+  const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const warningActiveRef = useRef(false);
@@ -298,6 +299,27 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
   }, [router]);
 
   logoutRef.current = logout;
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api<{ name: string; logoUrl: string | null }>('/practice')
+      .then((p) => {
+        if (cancelled) return;
+        if (p.name) setPracticeName(p.name);
+        if (!p.logoUrl) return;
+        return api<Blob>('/practice/logo').then((blob) => {
+          if (cancelled) return;
+          objectUrl = URL.createObjectURL(blob);
+          setLogoSrc(objectUrl);
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, []);
 
   const clearIdleTimers = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -418,10 +440,15 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
       </a>
       <header className="topbar" ref={sidebarRef}>
         <div className="topbar-brand">
-          <span className="topbar-brand-mark" aria-hidden>
-            O
-          </span>
-          <span className="topbar-brand-text">popEHR</span>
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoSrc} alt="" className="topbar-brand-logo" />
+          ) : (
+            <span className="topbar-brand-mark" aria-hidden>
+              {practiceName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span className="topbar-brand-text">{practiceName}</span>
           <button
             type="button"
             className="topbar-brand-toggle"

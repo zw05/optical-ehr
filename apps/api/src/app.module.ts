@@ -20,11 +20,9 @@ import { RecallsModule } from './recalls/recalls.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AcceptedPayersModule } from './accepted-payers/accepted-payers.module';
 import { UsersModule } from './users/users.module';
+import { CodesModule } from './codes/codes.module';
+import { PracticeModule } from './practice/practice.module';
 
-/**
- * Root module: registers every feature module and applies global JWT auth,
- * role checks, and PHI audit logging to all routes.
- */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -44,6 +42,8 @@ import { UsersModule } from './users/users.module';
     TasksModule,
     AcceptedPayersModule,
     UsersModule,
+    CodesModule,
+    PracticeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
