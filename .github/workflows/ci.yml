@@ -22,6 +22,8 @@ jobs:
       - run: npm run lint --workspaces --if-present
       - run: npm run typecheck --workspaces --if-present
       - run: npx prisma validate --schema apps/api/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ehr?schema=public
       - run: npm test --workspaces --if-present
 
   deploy-staging:
