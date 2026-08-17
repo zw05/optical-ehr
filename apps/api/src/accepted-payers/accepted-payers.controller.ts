@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Role } from '@prisma/client';
+import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 import { AcceptedPayersService } from './accepted-payers.service';
@@ -17,12 +19,14 @@ export class AcceptedPayersController {
 
   /** POST /api/accepted-payers — add a payer to the catalog. */
   @Post()
+  @Roles(Role.ADMIN)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateAcceptedPayerDto) {
     return this.payers.create(user.practiceId, dto);
   }
 
   /** PATCH /api/accepted-payers/:id — update or soft-deactivate a payer. */
   @Patch(':id')
+  @Roles(Role.ADMIN)
   update(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,

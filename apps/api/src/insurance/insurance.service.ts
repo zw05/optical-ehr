@@ -3,27 +3,34 @@ import { VerificationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInsuranceDto, UpdateInsuranceDto } from './insurance.dto';
 
-/**
- * Insurance record keeping only — stores payer/member details and manual
- * verification status. No eligibility checks or claim submission in v1.
- */
 @Injectable()
 export class InsuranceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Adds a policy to a patient (payer, member/group IDs, dates, priority). */
   async create(practiceId: string, dto: CreateInsuranceDto) {
     await this.assertPatient(practiceId, dto.patientId);
+    const fromCatalog = await this.resolvePayer(practiceId, dto.acceptedPayerId, dto.payerName);
     return this.prisma.insurancePolicy.create({
       data: {
-        ...dto,
+        patientId: dto.patientId,
+        acceptedPayerId: fromCatalog.id,
+        payerName: fromCatalog.name,
+        planName: dto.planName,
+        memberId: dto.memberId,
+        groupNumber: dto.groupNumber,
+        subscriberName: dto.subscriberName,
+        relation: dto.relation,
         effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : undefined,
         expirationDate: dto.expirationDate ? new Date(dto.expirationDate) : undefined,
+        isVision: dto.isVision ?? fromCatalog.isVision,
+        priority: dto.priority,
+        cardFrontDocId: dto.cardFrontDocId,
+        cardBackDocId: dto.cardBackDocId,
+        notes: dto.notes,
       },
     });
   }
 
-  /** Lists a patient's policies ordered primary-first. */
   async listForPatient(practiceId: string, patientId: string) {
     await this.assertPatient(practiceId, patientId);
     return this.prisma.insurancePolicy.findMany({
@@ -32,27 +39,39 @@ export class InsuranceService {
     });
   }
 
-  /** Edits policy fields; ownership is checked through the patient's practice. */
   async update(practiceId: string, id: string, dto: UpdateInsuranceDto) {
     const policy = await this.prisma.insurancePolicy.findFirst({
       where: { id, patient: { practiceId } },
     });
     if (!policy) throw new NotFoundException('Insurance policy not found');
-    const { effectiveDate, expirationDate, ...rest } = dto;
+    const fromCatalog =
+      dto.acceptedPayerId !== undefined || dto.payerName !== undefined
+        ? await this.resolvePayer(practiceId, dto.acceptedPayerId, dto.payerName ?? policy.payerName)
+        : null;
     return this.prisma.insurancePolicy.update({
       where: { id },
       data: {
-        ...rest,
-        ...(effectiveDate ? { effectiveDate: new Date(effectiveDate) } : {}),
-        ...(expirationDate ? { expirationDate: new Date(expirationDate) } : {}),
+        ...(dto.planName !== undefined ? { planName: dto.planName } : {}),
+        ...(dto.memberId !== undefined ? { memberId: dto.memberId } : {}),
+        ...(dto.groupNumber !== undefined ? { groupNumber: dto.groupNumber } : {}),
+        ...(dto.subscriberName !== undefined ? { subscriberName: dto.subscriberName } : {}),
+        ...(dto.relation !== undefined ? { relation: dto.relation } : {}),
+        ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+        ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        ...(dto.isVision !== undefined && !fromCatalog ? { isVision: dto.isVision } : {}),
+        ...(fromCatalog
+          ? {
+              acceptedPayerId: fromCatalog.id,
+              payerName: fromCatalog.name,
+              isVision: dto.isVision ?? fromCatalog.isVision,
+            }
+          : {}),
+        ...(dto.effectiveDate ? { effectiveDate: new Date(dto.effectiveDate) } : {}),
+        ...(dto.expirationDate ? { expirationDate: new Date(dto.expirationDate) } : {}),
       },
     });
   }
 
-  /**
-   * Records the result of a manual verification call/portal check.
-   * Stamps verifiedAt when set to VERIFIED; clears it otherwise.
-   */
   async setVerification(practiceId: string, id: string, status: VerificationStatus) {
     const policy = await this.prisma.insurancePolicy.findFirst({
       where: { id, patient: { practiceId } },
@@ -67,7 +86,23 @@ export class InsuranceService {
     });
   }
 
-  /** Throws 404 unless the patient exists inside the caller's practice. */
+  private async resolvePayer(practiceId: string, acceptedPayerId?: string, payerName?: string) {
+    if (acceptedPayerId) {
+      const payer = await this.prisma.acceptedPayer.findFirst({
+        where: { id: acceptedPayerId, practiceId },
+      });
+      if (!payer) throw new NotFoundException('Accepted payer not found');
+      return { id: payer.id, name: payer.name, isVision: payer.isVision };
+    }
+    const name = payerName?.trim();
+    if (!name) throw new NotFoundException('Select an accepted insurance type');
+    const byName = await this.prisma.acceptedPayer.findFirst({
+      where: { practiceId, name, isActive: true },
+    });
+    if (byName) return { id: byName.id, name: byName.name, isVision: byName.isVision };
+    return { id: null as string | null, name, isVision: true };
+  }
+
   private async assertPatient(practiceId: string, patientId: string) {
     const found = await this.prisma.patient.findFirst({
       where: { id: patientId, practiceId },

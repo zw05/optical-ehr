@@ -1875,6 +1875,17 @@ button.danger {
   gap: 0.75rem;
   padding: 0.65rem 0;
   border-top: 1px solid var(--border);
+  overflow: visible;
+  position: relative;
+}
+
+.icd10-lookup {
+  width: 100%;
+}
+
+.icd10-lookup .search-suggestions {
+  min-width: 22rem;
+  z-index: 50;
 }
 
 .exam-repeatable-row .exam-field-grid {
@@ -1955,6 +1966,392 @@ button.danger {
 
 .exam-ros-notes {
   min-width: 0;
+}
+
+.exam-external {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.exam-external-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.exam-external-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.exam-external-collapse {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.exam-external-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.exam-external-card {
+  background: var(--exam-block-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.75rem 0.85rem;
+  min-width: 0;
+}
+
+.exam-external-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.exam-external-card-head h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.exam-draw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.exam-draw-toolbar input[type='color'] {
+  width: 1.7rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--input-bg);
+  cursor: pointer;
+}
+
+.exam-draw-toolbar input[type='number'] {
+  width: 2.6rem;
+  min-height: 1.6rem;
+  padding: 0.15rem 0.25rem;
+  text-align: center;
+}
+
+.exam-draw-toolbar button {
+  min-height: 1.6rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.exam-sle-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr minmax(4.5rem, 0.55fr);
+  gap: 0.4rem;
+  align-items: start;
+}
+
+.exam-sle-lenses {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.exam-sle-lenses-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.exam-cornea-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.exam-draw-pad {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 6 / 5;
+  color: var(--text);
+  user-select: none;
+}
+
+.exam-draw-pad-lens {
+  aspect-ratio: 3 / 4;
+}
+
+.exam-draw-pad-cornea {
+  aspect-ratio: 8 / 5;
+}
+
+.exam-draw-bg,
+.exam-draw-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.exam-draw-bg {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exam-draw-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.exam-draw-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.exam-draw-pad.is-disabled .exam-draw-canvas {
+  pointer-events: none;
+  cursor: default;
+}
+
+.exam-draw-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.exam-cornea-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.65rem 0 0.5rem;
+}
+
+.exam-cornea-pill {
+  min-height: 1.55rem;
+  padding: 0.12rem 0.55rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.exam-cornea-pill.on,
+.exam-cornea-pill[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.exam-cornea-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.exam-external-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.exam-external-notes textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 3.2rem;
+}
+
+.exam-gonio-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.exam-gonio-eye {
+  min-width: 0;
+}
+
+.exam-gonio-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.15rem;
+}
+
+.exam-gonio-diagram {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  color: var(--text);
+}
+
+.exam-gonio-x {
+  position: absolute;
+  inset: 8%;
+  width: 84%;
+  height: 84%;
+}
+
+.exam-gonio-dir {
+  position: absolute;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.exam-gonio-dir.s {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.exam-gonio-dir.i {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.exam-gonio-dir.l {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.exam-gonio-dir.r {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.exam-gonio-arm {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  transform-origin: left center;
+}
+
+.exam-gonio-arm.tl {
+  transform: translateY(-50%) rotate(-135deg);
+}
+
+.exam-gonio-arm.tr {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.exam-gonio-arm.br {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.exam-gonio-arm.bl {
+  transform: translateY(-50%) rotate(135deg);
+}
+
+.exam-gonio-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  padding: 0 0.15rem;
+}
+
+.exam-gonio-arm input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.exam-gonio-arm input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+
+.exam-gonio-arm input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+}
+
+.exam-gonio-arm input[type='range']::-moz-range-track {
+  height: 2px;
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+
+.exam-gonio-arm input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+}
+
+.exam-gonio-pigment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.exam-gonio-pigment label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 1100px) {
+  .exam-external-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .exam-sle-body,
+  .exam-cornea-body,
+  .exam-gonio-body,
+  .exam-gonio-pigment {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 800px) {
@@ -2128,12 +2525,234 @@ button.danger {
   background: var(--panel-header-bg);
 }
 
+.settings-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin: -0.35rem 0 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-subnav-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid var(--border);
+}
+
+.settings-subnav-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+.settings-subnav-link {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.settings-subnav-link.active {
+  background: var(--panel-header-bg);
+  font-weight: 600;
+}
+
+.price-grid-wrap {
+  overflow: auto;
+  max-height: 28rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.price-grid {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.price-grid th,
+.price-grid td {
+  border: 1px solid var(--border);
+  padding: 0;
+  min-width: 4.2rem;
+}
+
+.price-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-header-bg);
+  z-index: 1;
+  padding: 0.2rem 0.3rem;
+}
+
+.price-grid td input {
+  width: 100%;
+  border: 0;
+  padding: 0.2rem 0.3rem;
+  background: transparent;
+}
+
+.topbar-brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .live-region {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
+}
+
+/* Attached documents (patient chart panel + exam tab) */
+.doc-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.doc-card:last-child {
+  margin-bottom: 0;
+}
+
+.doc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+/* The file name doubles as the preview trigger, styled as a link not a button. */
+.doc-card-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.doc-card-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+}
+
+/* Transcribed OD/OS values: tabular so mis-keyed powers are easy to spot. */
+.doc-card-values {
+  margin: 0.25rem 0 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+
+.doc-card-actions {
+  margin-bottom: 0;
+  gap: 0.5rem;
+}
+
+.doc-upload-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-hint {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.doc-transcribe {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.doc-transcribe legend {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.doc-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-picker h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.doc-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.doc-picker-row:last-child {
+  border-bottom: none;
+}
+
+.doc-viewer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.doc-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.doc-viewer-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+/* Images shrink to their natural height rather than filling the frame. */
+img.doc-viewer-frame {
+  height: auto;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+@media (max-width: 700px) {
+  .doc-viewer-frame {
+    height: 55vh;
+  }
 }
 
 /* Reduced motion */

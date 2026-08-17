@@ -77,10 +77,21 @@ export type ExamField =
       key: string;
       label: string;
       addLabel: string;
-      itemFields: { key: string; label: string; placeholder?: string; width?: 'full' | 'half' | 'third' }[];
+      itemFields: {
+        key: string;
+        label: string;
+        placeholder?: string;
+        width?: 'full' | 'half' | 'third';
+        lookup?: 'icd10';
+      }[];
     }
   | {
       type: 'hpiComplaint';
+      key: string;
+      label: string;
+    }
+  | {
+      type: 'externalExam';
       key: string;
       label: string;
     };
@@ -701,26 +712,8 @@ export const EXAM_TABS: ExamTab[] = [
     label: 'External/Internal',
     sections: [
       {
-        title: 'Slit lamp',
         fields: [
-          { type: 'slitLampRow', key: 'lidsLashes', label: 'Lids & lashes', gradingOptions: GRADING },
-          { type: 'slitLampRow', key: 'conjunctiva', label: 'Conjunctiva', gradingOptions: GRADING },
-          { type: 'slitLampRow', key: 'cornea', label: 'Cornea', gradingOptions: GRADING },
-          { type: 'slitLampRow', key: 'anteriorChamber', label: 'Anterior chamber', gradingOptions: GRADING },
-          { type: 'slitLampRow', key: 'iris', label: 'Iris' },
-          { type: 'slitLampRow', key: 'lens', label: 'Lens', gradingOptions: GRADING },
-          {
-            type: 'select',
-            key: 'vanHerick',
-            label: 'Van Herick angle',
-            options: [
-              { value: '1', label: 'Grade 1' },
-              { value: '2', label: 'Grade 2' },
-              { value: '3', label: 'Grade 3' },
-              { value: '4', label: 'Grade 4' },
-            ],
-            width: 'third',
-          },
+          { type: 'externalExam', key: 'externalExam', label: 'External Exam' },
         ],
       },
       {
@@ -823,8 +816,8 @@ export const EXAM_TABS: ExamTab[] = [
             label: 'Diagnoses (ICD-10)',
             addLabel: 'Add diagnosis',
             itemFields: [
-              { key: 'code', label: 'Code', placeholder: 'e.g. H52.13', width: 'third' },
-              { key: 'description', label: 'Description', placeholder: 'Diagnosis', width: 'half' },
+              { key: 'code', label: 'Code', placeholder: 'e.g. H52.13', width: 'third', lookup: 'icd10' },
+              { key: 'description', label: 'Description', placeholder: 'Diagnosis', width: 'half', lookup: 'icd10' },
             ],
           },
           {
@@ -869,9 +862,10 @@ export const EXAM_TABS: ExamTab[] = [
     sections: [],
   },
   {
+    // Rendered by the AttachedDocs component, not the generic field renderer:
+    // its content lives in Document/EncounterDocument rows, not clinicalData.
     key: 'attachedDocs',
     label: 'Attached Docs',
-    stub: true,
     sections: [],
   },
 ];

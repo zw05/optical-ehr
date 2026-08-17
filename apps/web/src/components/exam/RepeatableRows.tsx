@@ -1,10 +1,13 @@
 'use client';
 
+import { Icd10Lookup } from './Icd10Lookup';
+
 interface ItemField {
   key: string;
   label: string;
   placeholder?: string;
   width?: 'full' | 'half' | 'third';
+  lookup?: 'icd10';
 }
 
 interface RepeatableRowsProps {
@@ -28,6 +31,11 @@ export function RepeatableRows({
 
   function updateRow(index: number, fieldKey: string, fieldValue: string) {
     const next = rows.map((row, i) => (i === index ? { ...row, [fieldKey]: fieldValue } : row));
+    onChange(next);
+  }
+
+  function updateRowFields(index: number, patch: Record<string, string>) {
+    const next = rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
     onChange(next);
   }
 
@@ -58,12 +66,25 @@ export function RepeatableRows({
             {itemFields.map((f) => (
               <div key={f.key} className={`field exam-w-${f.width ?? 'half'}`}>
                 <label>{f.label}</label>
-                <input
-                  disabled={disabled}
-                  placeholder={f.placeholder}
-                  value={row[f.key] ?? ''}
-                  onChange={(e) => updateRow(index, f.key, e.target.value)}
-                />
+                {f.lookup === 'icd10' ? (
+                  <Icd10Lookup
+                    value={row[f.key] ?? ''}
+                    placeholder={f.placeholder}
+                    disabled={disabled}
+                    ariaLabel={f.label}
+                    onChange={(v) => updateRow(index, f.key, v)}
+                    onSelect={(entry) =>
+                      updateRowFields(index, { code: entry.code, description: entry.description })
+                    }
+                  />
+                ) : (
+                  <input
+                    disabled={disabled}
+                    placeholder={f.placeholder}
+                    value={row[f.key] ?? ''}
+                    onChange={(e) => updateRow(index, f.key, e.target.value)}
+                  />
+                )}
               </div>
             ))}
           </div>

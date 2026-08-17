@@ -2,6 +2,7 @@
 
 import type { ExamField } from '@/app/exams/[id]/examDefinition';
 import { CheckboxGroup } from './CheckboxGroup';
+import { ExternalExam } from './ExternalExam';
 import { HpiComplaints, type HpiComplaint } from './HpiComplaints';
 import { OdOsGrid } from './OdOsGrid';
 import { RadioRow } from './RadioRow';
@@ -250,6 +251,15 @@ export function FieldRenderer({
         </div>
       );
     }
+
+    case 'externalExam':
+      return (
+        <ExternalExam
+          value={value}
+          disabled={disabled}
+          onChange={(v) => onChange(field.key, v)}
+        />
+      );
 
     case 'testRow': {
       const row = (value as { performed?: boolean; result?: string; notes?: string }) ?? {};

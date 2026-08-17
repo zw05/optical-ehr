@@ -1,10 +1,11 @@
 'use client';
 
-/** Single patient chart: demographics, insurance, exams, prescriptions, print Rx PDF. */
+/** Single patient chart: demographics, insurance, exams, prescriptions, documents, print Rx PDF. */
 import { useCallback, useEffect, useState, FormEvent, ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BackButton from '@/components/BackButton';
+import { PatientDocumentsPanel } from '@/components/documents/PatientDocumentsPanel';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { api, getSessionUser } from '@/lib/api';
 import { recordRecentPatient } from '@/lib/recentPatients';
@@ -30,6 +31,7 @@ interface PatientDetail {
   histories: { id: string; kind: string; label: string; detail: string | null; resolved: boolean }[];
   insurances: {
     id: string;
+    acceptedPayerId: string | null;
     payerName: string;
     memberId: string;
     groupNumber: string | null;
@@ -538,23 +540,12 @@ export default function PatientChartPage() {
 
         <section className="card">
           <h2>Insurance</h2>
-          {patient.insurances.length === 0 && <p className="muted">No policies on file.</p>}
-          {patient.insurances.map((policy) => (
-            <div key={policy.id} className="policy-block">
-              <div className="policy-block-header">
-                <strong>{policy.payerName}</strong>
-                <span className={`badge ${policy.verification === 'VERIFIED' ? 'success' : 'warning'}`}>
-                  {titleCase(policy.verification)}
-                </span>
-              </div>
-              <dl className="detail-list">
-                <DetailRow label="Member ID">{policy.memberId}</DetailRow>
-                <DetailRow label="Group">{policy.groupNumber}</DetailRow>
-                <DetailRow label="Plan type">{policy.isVision ? 'Vision' : 'Medical'}</DetailRow>
-                <DetailRow label="Priority">{priorityLabel(policy.priority)}</DetailRow>
-              </dl>
-            </div>
-          ))}
+          <PatientInsurancePanel
+            patientId={patient.id}
+            policies={patient.insurances}
+            canEdit={canEditPatient}
+            onChanged={() => void load()}
+          />
         </section>
       </div>
 
@@ -693,6 +684,15 @@ export default function PatientChartPage() {
         )}
       </section>
 
+      <section className="card">
+        <h2>Documents</h2>
+        <PatientDocumentsPanel
+          patientId={patientId}
+          canUpload={canEditPatient}
+          isClinical={isClinical}
+        />
+      </section>
+
       {patient.recalls.length > 0 && (
         <section className="card">
           <h2>Pending recalls</h2>
@@ -706,6 +706,167 @@ export default function PatientChartPage() {
         </section>
       )}
     </AppShell>
+  );
+}
+
+function PatientInsurancePanel({
+  patientId,
+  policies,
+  canEdit,
+  onChanged,
+}: {
+  patientId: string;
+  policies: PatientDetail['insurances'];
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [payers, setPayers] = useState<{ id: string; name: string; isVision: boolean }[]>([]);
+  const [show, setShow] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    acceptedPayerId: '',
+    memberId: '',
+    groupNumber: '',
+    priority: '1',
+  });
+
+  useEffect(() => {
+    api<{ id: string; name: string; isVision: boolean }[]>('/accepted-payers')
+      .then(setPayers)
+      .catch(() => setPayers([]));
+  }, []);
+
+  function openCreate() {
+    setEditingId(null);
+    setForm({ acceptedPayerId: payers[0]?.id ?? '', memberId: '', groupNumber: '', priority: '1' });
+    setShow(true);
+    setError(null);
+  }
+
+  function openEdit(p: PatientDetail['insurances'][number]) {
+    setEditingId(p.id);
+    setForm({
+      acceptedPayerId: p.acceptedPayerId ?? payers.find((x) => x.name === p.payerName)?.id ?? '',
+      memberId: p.memberId,
+      groupNumber: p.groupNumber ?? '',
+      priority: String(p.priority),
+    });
+    setShow(true);
+    setError(null);
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      const body = {
+        patientId,
+        acceptedPayerId: form.acceptedPayerId || undefined,
+        memberId: form.memberId,
+        groupNumber: form.groupNumber || undefined,
+        priority: Number(form.priority),
+      };
+      if (editingId) await api(`/insurance/${editingId}`, { method: 'PATCH', body });
+      else await api('/insurance', { method: 'POST', body });
+      setShow(false);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    }
+  }
+
+  async function verify(id: string, status: 'VERIFIED' | 'UNVERIFIED' | 'INACTIVE') {
+    setError(null);
+    try {
+      await api(`/insurance/${id}/verification`, { method: 'PATCH', body: { status } });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed');
+    }
+  }
+
+  return (
+    <>
+      {canEdit && (
+        <div className="toolbar">
+          <button type="button" className="secondary" onClick={openCreate}>
+            Add policy
+          </button>
+        </div>
+      )}
+      {error && <p className="error-text">{error}</p>}
+      {show && (
+        <form onSubmit={save} style={{ marginBottom: '1rem' }}>
+          <div className="grid-2">
+            <div className="field">
+              <label>Accepted payer</label>
+              <select
+                required
+                value={form.acceptedPayerId}
+                onChange={(e) => setForm({ ...form, acceptedPayerId: e.target.value })}
+              >
+                <option value="">Select…</option>
+                {payers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.isVision ? 'Vision' : 'Medical'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Member ID</label>
+              <input required value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Group</label>
+              <input value={form.groupNumber} onChange={(e) => setForm({ ...form, groupNumber: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Priority</label>
+              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                <option value="1">Primary</option>
+                <option value="2">Secondary</option>
+                <option value="3">Tertiary</option>
+              </select>
+            </div>
+          </div>
+          <div className="toolbar">
+            <button type="submit">Save policy</button>
+            <button type="button" className="secondary" onClick={() => setShow(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {policies.length === 0 && <p className="muted">No policies on file.</p>}
+      {policies.map((policy) => (
+        <div key={policy.id} className="policy-block">
+          <div className="policy-block-header">
+            <strong>{policy.payerName}</strong>
+            <span className={`badge ${policy.verification === 'VERIFIED' ? 'success' : 'warning'}`}>
+              {titleCase(policy.verification)}
+            </span>
+          </div>
+          <dl className="detail-list">
+            <DetailRow label="Member ID">{policy.memberId}</DetailRow>
+            <DetailRow label="Group">{policy.groupNumber}</DetailRow>
+            <DetailRow label="Plan type">{policy.isVision ? 'Vision' : 'Medical'}</DetailRow>
+            <DetailRow label="Priority">{priorityLabel(policy.priority)}</DetailRow>
+          </dl>
+          {canEdit && (
+            <div className="toolbar">
+              <button type="button" className="secondary" onClick={() => openEdit(policy)}>
+                Edit
+              </button>
+              <button type="button" className="secondary" onClick={() => void verify(policy.id, 'VERIFIED')}>
+                Verify
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </>
   );
 }
 

@@ -14,7 +14,13 @@ model Practice {
   name      String
   phone     String?
   fax       String?
+  email     String?
+  website   String?
   address   String?
+  npi       String?
+  taxId     String?
+  timezone  String?
+  hours     Json?
   logoUrl   String?
   createdAt DateTime @default(now())
 
@@ -32,6 +38,8 @@ model Practice {
   auditEvents      AuditEvent[]
   appointmentTypes AppointmentType[]
   acceptedPayers   AcceptedPayer[]
+  lensPriceLists   LensPriceList[]
+  opticalAddOns    OpticalAddOn[]
 }
 
 enum Role {
@@ -66,6 +74,7 @@ model User {
   auditEvents      AuditEvent[]
   appointments     Appointment[]  @relation("Provider")
   tasksAssigned    Task[]         @relation("Assignee")
+  documentLinks    EncounterDocument[]
 }
 
 // ---------- Patient chart ----------
@@ -168,6 +177,8 @@ model InsurancePolicy {
   id             String             @id @default(uuid())
   patientId      String
   patient        Patient            @relation(fields: [patientId], references: [id])
+  acceptedPayerId String?
+  acceptedPayer   AcceptedPayer?    @relation(fields: [acceptedPayerId], references: [id])
   payerName      String
   planName       String?
   memberId       String
@@ -191,15 +202,25 @@ model InsurancePolicy {
 
 // Practice catalog of insurance payers accepted at the front desk.
 model AcceptedPayer {
-  id         String   @id @default(uuid())
-  practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
-  name       String // e.g. VSP, EyeMed, Medicare
-  notes      String?
-  isVision   Boolean  @default(true)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String   @id @default(uuid())
+  practiceId        String
+  practice          Practice @relation(fields: [practiceId], references: [id])
+  name              String // e.g. VSP, EyeMed, Medicare
+  notes             String?
+  eligibilityNotes  String?
+  phone             String?
+  fax               String?
+  website           String?
+  payerId           String?
+  frameAllowance    Decimal? @db.Decimal(10, 2)
+  lensAllowance     Decimal? @db.Decimal(10, 2)
+  examCopay         Decimal? @db.Decimal(10, 2)
+  requiresAuth      Boolean  @default(false)
+  isVision          Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  policies          InsurancePolicy[]
 
   @@unique([practiceId, name])
   @@index([practiceId, isActive])
@@ -318,6 +339,7 @@ model Encounter {
   addenda       Addendum[]
   prescriptions Prescription[]
   reports       GeneratedReport[]
+  documentLinks EncounterDocument[]
 
   @@index([practiceId, patientId, createdAt])
 }
@@ -382,6 +404,26 @@ model Prescription {
 
 // ---------- Documents & reports ----------
 
+/// What a scanned/imported file actually is. Drives which structured fields the
+/// UI offers and which documents can be pulled forward into an exam.
+enum DocumentKind {
+  EXTERNAL_RECORD // outside chart notes, referral packets
+  EXTERNAL_RX // spectacle/CL prescription written by another doctor
+  KERATOMETRY // K readings from an outside device or provider
+  REFERRAL_LETTER
+  LAB_IMAGING
+  INSURANCE_CARD
+  OTHER
+}
+
+/// Values transcribed or OCR'd off a document are never trusted clinically
+/// until a technician or doctor confirms them against the source image.
+enum DocumentReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  REJECTED
+}
+
 model Document {
   id          String   @id @default(uuid())
   patientId   String
@@ -391,11 +433,42 @@ model Document {
   blobPath    String // container-relative path in Azure Blob Storage
   sha256      String
   sizeBytes   Int
-  category    String? // insurance-card, external-record, scan...
+  category    String? // free-text label kept for pre-DocumentKind rows
+  kind        DocumentKind @default(OTHER)
+  externalProvider String? // clinic/doctor the record came from
+  documentDate DateTime? // date printed on the paper, not the upload date
+  // Structured values read off the document, shape per kind:
+  // EXTERNAL_RX  { od: {sphere,cylinder,axis,add}, os: {...}, pd, notes }
+  // KERATOMETRY  { od: {k1,k2,kAxis}, os: {...}, notes }
+  // Validated in DocumentsService; only meaningful once reviewStatus = REVIEWED.
+  extractedData Json?
+  reviewStatus DocumentReviewStatus @default(PENDING_REVIEW)
+  reviewedById String?
+  reviewedAt   DateTime?
   uploadedById String?
   createdAt   DateTime @default(now())
 
+  encounterLinks EncounterDocument[]
+
   @@index([patientId])
+  @@index([patientId, kind])
+}
+
+/// Join between a chart document and the visits it is relevant to. A single
+/// scanned outside Rx is uploaded once and referenced by every exam that needs
+/// it, mirroring how one photocopy sits in a paper folder across visits.
+model EncounterDocument {
+  id          String    @id @default(uuid())
+  encounterId String
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  linkedById  String?
+  linkedBy    User?     @relation(fields: [linkedById], references: [id])
+  linkedAt    DateTime  @default(now())
+
+  @@unique([encounterId, documentId])
+  @@index([documentId])
 }
 
 model ReportTemplate {
@@ -508,22 +581,92 @@ enum InventoryKind {
 }
 
 model InventoryItem {
-  id         String        @id @default(uuid())
-  practiceId String
-  practice   Practice      @relation(fields: [practiceId], references: [id])
-  kind       InventoryKind
-  sku        String
-  brand      String?
-  model      String?
-  color      String?
-  size       String?
-  quantity   Int           @default(0)
-  cost       Decimal?      @db.Decimal(10, 2)
-  retail     Decimal?      @db.Decimal(10, 2)
-  isActive   Boolean       @default(true)
-  updatedAt  DateTime      @updatedAt
+  id           String        @id @default(uuid())
+  practiceId   String
+  practice     Practice      @relation(fields: [practiceId], references: [id])
+  kind         InventoryKind
+  sku          String
+  brand        String?
+  model        String?
+  color        String?
+  size         String?
+  eye          String?
+  bridge       String?
+  temple       String?
+  a            String?
+  b            String?
+  ed           String?
+  material     String?
+  shape        String?
+  upc          String?
+  reorderPoint Int?
+  quantity     Int           @default(0)
+  cost         Decimal?      @db.Decimal(10, 2)
+  retail       Decimal?      @db.Decimal(10, 2)
+  isActive     Boolean       @default(true)
+  updatedAt    DateTime      @updatedAt
 
   @@unique([practiceId, sku])
+}
+
+enum LensDesign {
+  SV
+  BIFOCAL
+  PAL
+  OFFICE
+  OTHER
+}
+
+enum OpticalAddOnKind {
+  AR
+  UV
+  PHOTOCHROMIC
+  POLARIZED
+  BLUE_LIGHT
+  EDGE
+  OTHER
+}
+
+model LensPriceList {
+  id         String      @id @default(uuid())
+  practiceId String
+  practice   Practice    @relation(fields: [practiceId], references: [id])
+  name       String
+  design     LensDesign  @default(SV)
+  material   String
+  index      Decimal?    @db.Decimal(4, 2)
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  cells      LensPriceCell[]
+
+  @@unique([practiceId, name])
+}
+
+model LensPriceCell {
+  id          String       @id @default(uuid())
+  priceListId String
+  priceList   LensPriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  sphere      Decimal      @db.Decimal(5, 2)
+  cylinder    Decimal      @db.Decimal(5, 2)
+  price       Decimal      @db.Decimal(10, 2)
+
+  @@unique([priceListId, sphere, cylinder])
+  @@index([priceListId])
+}
+
+model OpticalAddOn {
+  id         String           @id @default(uuid())
+  practiceId String
+  practice   Practice         @relation(fields: [practiceId], references: [id])
+  name       String
+  kind       OpticalAddOnKind @default(OTHER)
+  price      Decimal          @db.Decimal(10, 2)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([practiceId, name])
 }
 
 // ---------- Recalls & tasks ----------

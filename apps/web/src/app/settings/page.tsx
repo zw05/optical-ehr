@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { TabStrip } from '@/components/TabStrip';
 import { getSessionUser, api } from '@/lib/api';
@@ -154,11 +153,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="settings-header">
-        <h1 className="page-header" style={{ margin: 0 }}>
-          Settings
-        </h1>
+        <h2 className="page-header" style={{ margin: 0 }}>
+          My preferences
+        </h2>
         {(saving || savedFlash) && (
           <span className="settings-saved" aria-live="polite">
             {saving ? 'Saving…' : 'Saved'}
@@ -236,7 +235,7 @@ export default function SettingsPage() {
           />
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 
