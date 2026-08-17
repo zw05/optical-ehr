@@ -1,5 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { AppointmentStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AppointmentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateAppointmentDto,
@@ -15,6 +21,20 @@ const ACTIVE_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CHECKED_IN,
   AppointmentStatus.IN_PROGRESS,
 ];
+
+/**
+ * Transitions that represent clinical work rather than front-desk work. The
+ * front desk owns the arrival half of the lifecycle (confirm, check in,
+ * no-show, cancel), but starting and finishing an exam belongs to the staff
+ * actually performing it.
+ */
+const CLINICAL_TRANSITIONS: AppointmentStatus[] = [
+  AppointmentStatus.IN_PROGRESS,
+  AppointmentStatus.COMPLETED,
+];
+
+/** Roles allowed to perform the clinical transitions above. */
+const CLINICAL_TRANSITION_ROLES: string[] = [Role.TECHNICIAN, Role.DOCTOR, Role.ADMIN];
 
 /** Provider calendars: appointment types, booking, rescheduling, and status flow. */
 @Injectable()
@@ -128,14 +148,18 @@ export class SchedulingService {
 
   /**
    * Moves an appointment through its lifecycle (confirm, check in, start,
-   * complete, cancel, no-show). Cancellation requires a reason. Checking a
-   * patient in automatically opens a clinical encounter on the active exam
-   * template so the technician can begin pre-testing immediately.
+   * complete, cancel, no-show). Cancellation requires a reason. Starting and
+   * completing an exam is restricted to clinical staff. Checking a patient in
+   * automatically opens a clinical encounter on the active exam template so
+   * the technician can begin pre-testing immediately.
    */
-  async setStatus(practiceId: string, id: string, dto: SetStatusDto) {
+  async setStatus(practiceId: string, id: string, dto: SetStatusDto, role: string) {
     const appt = await this.getOwned(practiceId, id);
     if (dto.status === AppointmentStatus.CANCELLED && !dto.cancelReason) {
       throw new BadRequestException('Cancellation requires a reason');
+    }
+    if (CLINICAL_TRANSITIONS.includes(dto.status) && !CLINICAL_TRANSITION_ROLES.includes(role)) {
+      throw new ForbiddenException('Only clinical staff can start or complete an exam');
     }
 
     const updated = await this.prisma.appointment.update({

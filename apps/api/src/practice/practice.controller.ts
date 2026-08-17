@@ -1,7 +1,5 @@
 import { Body, Controller, Get, Patch, Post, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { Role } from '@prisma/client';
-import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
@@ -25,16 +23,14 @@ export class PracticeController {
     return this.practice.get(user.practiceId);
   }
 
-  /** PATCH /api/practice — admin updates store profile. */
+  /** PATCH /api/practice — any signed-in staff member updates the store profile. */
   @Patch()
-  @Roles(Role.ADMIN)
   update(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePracticeDto) {
     return this.practice.update(user.practiceId, dto);
   }
 
   /** POST /api/practice/logo — upload PNG/JPEG practice logo. */
   @Post('logo')
-  @Roles(Role.ADMIN)
   uploadLogo(@CurrentUser() user: JwtPayload, @Body() dto: UploadPracticeLogoDto) {
     return this.practice.uploadLogo(user.practiceId, dto.fileName, dto.contentType, dto.dataBase64);
   }

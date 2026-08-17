@@ -8,6 +8,8 @@ import { actionsForStatus, canCancelAppointment } from './appointmentStatus';
 interface AppointmentStatusActionsProps {
   appointmentId: string;
   status: string;
+  /** Signed-in user's role; decides whether clinical actions are offered. */
+  role: string | undefined;
   onUpdated?: () => void | Promise<void>;
   onError?: (message: string) => void;
 }
@@ -24,6 +26,7 @@ function actionClass(nextStatus: string): string {
 export default function AppointmentStatusActions({
   appointmentId,
   status,
+  role,
   onUpdated,
   onError,
 }: AppointmentStatusActionsProps) {
@@ -50,7 +53,7 @@ export default function AppointmentStatusActions({
 
   return (
     <div className="appt-actions">
-      {actionsForStatus(status).map((action) => (
+      {actionsForStatus(status, role).map((action) => (
         <button
           key={action.status}
           type="button"

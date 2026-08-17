@@ -289,6 +289,7 @@ export default function DashboardPage() {
                         <AppointmentStatusActions
                           appointmentId={a.id}
                           status={a.status}
+                          role={sessionUser?.role}
                           onUpdated={refreshAfterStatus}
                           onError={setActionError}
                         />
@@ -498,6 +499,7 @@ export default function DashboardPage() {
                         <AppointmentStatusActions
                           appointmentId={a.id}
                           status={a.status}
+                          role={sessionUser?.role}
                           onUpdated={refreshAfterStatus}
                           onError={setActionError}
                         />

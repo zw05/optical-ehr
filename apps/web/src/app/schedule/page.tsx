@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import AppointmentStatusActions from '@/components/scheduling/AppointmentStatusActions';
 import BookAppointmentForm from '@/components/scheduling/BookAppointmentForm';
-import { api } from '@/lib/api';
+import { api, getSessionUser } from '@/lib/api';
 
 interface Appointment {
   id: string;
@@ -20,6 +20,7 @@ interface Appointment {
 }
 
 export default function SchedulePage() {
+  const sessionUser = useMemo(() => getSessionUser(), []);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +113,7 @@ export default function SchedulePage() {
                       <AppointmentStatusActions
                         appointmentId={a.id}
                         status={a.status}
+                        role={sessionUser?.role}
                         onUpdated={load}
                         onError={setError}
                       />
@@ -181,6 +183,7 @@ export default function SchedulePage() {
                     <AppointmentStatusActions
                       appointmentId={a.id}
                       status={a.status}
+                      role={sessionUser?.role}
                       onUpdated={load}
                       onError={setError}
                     />
