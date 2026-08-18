@@ -39,6 +39,11 @@ function toNumber(value: unknown): number {
   return value == null ? 0 : Number(value);
 }
 
+/**
+ * Spectacle lens pricing: power-banded price lists plus coatings and add-ons.
+ * Bands describe ranges rather than individual powers, which is both how lab
+ * sheets read and what a person can maintain by hand.
+ */
 @Injectable()
 export class PricingService {
   constructor(private readonly prisma: PrismaService) {}

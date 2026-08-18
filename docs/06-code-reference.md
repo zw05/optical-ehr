@@ -31,16 +31,18 @@ Global interceptor: AuditInterceptor (log PHI access after each call)
 
 | Method | What it does |
 | ------ | ------------ |
-| `login(email, password, ip?)` | Verifies bcrypt password, issues a 15-minute JWT, writes a LOGIN audit event. Returns `{ accessToken, user }`. |
+| `login(email, password, ip?)` | Verifies bcrypt password, issues a JWT (`JWT_EXPIRES_IN`, 15 minutes by default), writes a LOGIN audit event. Returns `{ accessToken, user, preferences, permissions }`. |
 
 ### Guards & decorators
 
 | Symbol | What it does |
 | ------ | ------------ |
-| `JwtAuthGuard` | Requires `Authorization: Bearer <token>` on all routes except `@Public()`. Sets `request.user` to the JWT payload. |
+| `JwtAuthGuard` | Requires `Authorization: Bearer <token>` on all routes except `@Public()`. Sets `request.user` from the token, then refreshes the role and resolves the effective permission set from the account row, rejecting deactivated accounts. |
 | `RolesGuard` | Enforces `@Roles(...)` on routes. ADMIN bypasses role lists; clinical sign-off is still doctor-only inside services. |
+| `PermissionsGuard` | Enforces `@RequirePermission(...)` against the set JwtAuthGuard resolved, so a revoked capability applies on the next call rather than the next login. |
 | `@Public()` | Skips JWT check (login endpoint). |
 | `@Roles(...)` | Declares which staff roles may call a route. |
+| `@RequirePermission(...)` | Declares which capabilities a route needs. See [Store settings](#store-settings). |
 | `@CurrentUser()` | Injects the JWT payload into a controller parameter. |
 
 ### API routes — auth
@@ -64,7 +66,7 @@ Global interceptor: AuditInterceptor (log PHI access after each call)
 
 | Method | What it does |
 | ------ | ------------ |
-| `intercept(...)` | After every authenticated API call, maps HTTP method → action (GET→READ, POST→CREATE, …) and writes an audit row. Skips noisy reads of templates/inventory. |
+| `intercept(...)` | After every authenticated API call, maps HTTP method → action (GET→READ, POST→CREATE, …) and writes an audit row. Skips noisy *reads* of non-PHI reference data (templates, inventory, store settings, codes, payers); every write is recorded. |
 
 | Route | Description |
 | ----- | ----------- |
@@ -308,7 +310,7 @@ Fulfillment path: `DRAFT → ORDERED → AT_LAB → RECEIVED → VERIFIED → DI
 
 | Method | What it does |
 | ------ | ------------ |
-| `list(...)` | Search frames / CL trial stock by SKU, brand, model. |
+| `list(...)` | Search frames / CL trial stock by SKU, brand, model. `lowStockOnly` narrows to items at or below their reorder point, filtered in the service because Prisma cannot compare two columns. |
 | `upsert(...)` | Create or update an item by SKU. |
 | `adjustQuantity(...)` | +1 receive / −1 dispense; rejects negative stock. |
 | `deactivate(...)` | Soft-delete an SKU. |
@@ -430,7 +432,10 @@ reference data, and account and permission changes additionally log a readable b
 | `getToken()` / `getSessionUser()` | Read JWT and user from `sessionStorage`. |
 | `setSession(token, user, preferences?, permissions?)` | Store session, preference cache, and capability set after login. |
 | `clearSession()` | Sign out. |
-| `api(path, options?)` | Authenticated fetch to `/api/*`. Handles 401 redirect, JSON errors, PDF blobs. |
+| `api(path, options?)` | Authenticated fetch to `/api/*`. Handles 401 redirect, JSON errors, and binary responses (PDF, images, xlsx) as blobs. |
+| `downloadApiFile(path, filename)` | Fetches a blob and saves it — used by every template and export button. |
+| `fileToBase64(file)` | Encodes a picked file for the JSON upload endpoints. |
+| `apiUpload(path, file, field?)` | Multipart upload variant. |
 
 ### `lib/permissions.ts`
 
@@ -455,7 +460,7 @@ deliberately keep a plain input.
 
 | Function | What it does |
 | -------- | ------------ |
-| `AppShell` | Layout wrapper: sidebar nav (role-filtered), user info, sign out, **15-minute idle logout**. |
+| `AppShell` | Layout wrapper: sidebar nav (role-filtered), user info, sign out, **idle logout** (15 minutes by default, 5–30 per user preference). |
 
 ### Pages
 

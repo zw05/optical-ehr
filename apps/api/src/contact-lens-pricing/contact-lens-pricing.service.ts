@@ -34,6 +34,11 @@ function toNumber(value: Prisma.Decimal | number | null): number | null {
   return value == null ? null : Number(value);
 }
 
+/**
+ * Contact lens catalog, supply pricing, and professional fees. Priced per box
+ * rather than per power, because contact lens parameters do not change what the
+ * practice pays or charges.
+ */
 @Injectable()
 export class ContactLensPricingService {
   constructor(private readonly prisma: PrismaService) {}

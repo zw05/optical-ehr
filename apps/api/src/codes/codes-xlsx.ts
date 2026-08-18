@@ -42,6 +42,11 @@ function parseFlag(raw: string): boolean | null {
   return null;
 }
 
+/**
+ * Reads a code workbook. The System column may be omitted when the sheet is
+ * named for a code system, since a practice exporting one system at a time
+ * tends to drop the redundant column.
+ */
 export async function parseCodeWorkbook(
   buffer: Buffer,
 ): Promise<{ rows: ParsedCodeRow[]; errors: string[] }> {
@@ -96,6 +101,7 @@ function writeSheet(sheet: ExcelJS.Worksheet, rows: (string | number)[][]) {
   sheet.getColumn(5).width = 10;
 }
 
+/** A starter workbook showing one row per code system. */
 export async function buildCodeTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Optical EHR';

@@ -46,6 +46,12 @@ function rank(entry: { code: string; description: string }, q: string): number {
   return 99;
 }
 
+/**
+ * The practice's diagnosis and procedure code catalog. Seeded once from the
+ * bundled optometry sets, then owned by the practice: codes it never bills can
+ * be retired, its own can be added, and the handful used daily pinned to the
+ * top of the exam lookups.
+ */
 @Injectable()
 export class CodesService {
   constructor(private readonly prisma: PrismaService) {}

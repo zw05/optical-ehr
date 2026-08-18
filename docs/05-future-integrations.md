@@ -10,7 +10,7 @@ match X12, NCPDP, or FHIR — adapters own that translation.
 - `InsurancePolicy` carries payer/member/group/relationship data sufficient to build X12
   270 (eligibility) and 837P (professional claim) segments.
 - `Encounter.diagnosisCodes` (ICD-10) and `Encounter.procedureCodes` (CPT) provide the
-  superbill for claim lines.
+  superbill for claim lines, drawn from the practice-maintained `CodeCatalogEntry` catalog.
 - `Prescription` versioning and prescriber NPI/license fields support both Rx export and
   e-prescribing identity requirements.
 - The audit framework records EXPORT actions, which claims/eRx transmissions must log.

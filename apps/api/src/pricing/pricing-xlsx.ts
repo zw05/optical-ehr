@@ -415,6 +415,7 @@ export async function buildPriceExport(
 
 // ---------- Frames ----------
 
+/** A starter workbook for the frame catalog, one row per SKU. */
 export async function buildFramesTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Frames');
@@ -470,6 +471,11 @@ export interface ParsedFrameRow {
   upc?: string;
 }
 
+/**
+ * Reads a frame catalog workbook from its first sheet. Rows without a SKU are
+ * skipped rather than rejected, since vendor sheets often carry blank spacer
+ * rows between brands.
+ */
 export async function parseFramesWorkbook(
   buffer: Buffer,
 ): Promise<{ rows: ParsedFrameRow[]; errors: string[] }> {

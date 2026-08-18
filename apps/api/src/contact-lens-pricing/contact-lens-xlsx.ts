@@ -204,6 +204,7 @@ function writeFeeSheet(sheet: ExcelJS.Worksheet, rows: (string | number)[][]) {
   sheet.getColumn(2).width = 22;
 }
 
+/** A starter workbook: a Products sheet and a Fees sheet, each with examples. */
 export async function buildContactLensTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Optical EHR';
@@ -222,6 +223,7 @@ export async function buildContactLensTemplate(): Promise<Buffer> {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+/** Exports the current catalog in the same shape the importer accepts. */
 export async function buildContactLensExport(
   products: ParsedProduct[],
   fees: ParsedFee[],
