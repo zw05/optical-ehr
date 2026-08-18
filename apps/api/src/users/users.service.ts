@@ -9,7 +9,14 @@ import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateUserDto, UpdateUserDto } from './users.dto';
+import {
+  effectivePermissions,
+  parseOverrides,
+  Permission,
+  type PermissionKey,
+} from '../auth/permissions';
 
 const STAFF_SELECT = {
   id: true,
@@ -20,12 +27,34 @@ const STAFF_SELECT = {
   licenseNumber: true,
   npi: true,
   isActive: true,
+  permissionOverrides: true,
   createdAt: true,
 } as const;
 
+type StaffRow = {
+  role: Role;
+  permissionOverrides: unknown;
+};
+
+/**
+ * Expands the stored override JSON into what the permissions screen needs:
+ * the raw grant/deny lists it edits, and the resolved set it displays.
+ */
+function withPermissions<T extends StaffRow>(row: T) {
+  const { permissionOverrides, ...rest } = row;
+  return {
+    ...rest,
+    overrides: parseOverrides(permissionOverrides),
+    permissions: effectivePermissions(row.role, permissionOverrides),
+  };
+}
+
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   listPicker(practiceId: string, clinical?: boolean) {
     return this.prisma.user.findMany({
@@ -45,12 +74,13 @@ export class UsersService {
     });
   }
 
-  listDirectory(practiceId: string) {
-    return this.prisma.user.findMany({
+  async listDirectory(practiceId: string) {
+    const rows = await this.prisma.user.findMany({
       where: { practiceId },
       select: STAFF_SELECT,
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
+    return rows.map(withPermissions);
   }
 
   async create(practiceId: string, dto: CreateUserDto) {
@@ -71,7 +101,7 @@ export class UsersService {
         },
         select: STAFF_SELECT,
       });
-      return { user, temporaryPassword };
+      return { user: withPermissions(user), temporaryPassword };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('A user with that email already exists');
@@ -87,7 +117,7 @@ export class UsersService {
       await this.assertNotLastAdmin(practiceId, id);
     }
     try {
-      return await this.prisma.user.update({
+      const updated = await this.prisma.user.update({
         where: { id },
         data: {
           ...(dto.email !== undefined ? { email: dto.email.trim().toLowerCase() } : {}),
@@ -99,6 +129,7 @@ export class UsersService {
         },
         select: STAFF_SELECT,
       });
+      return withPermissions(updated);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('A user with that email already exists');
@@ -107,18 +138,71 @@ export class UsersService {
     }
   }
 
-  async setActive(practiceId: string, id: string, isActive: boolean) {
+  async setActive(practiceId: string, id: string, isActive: boolean, actorId?: string) {
     const existing = await this.prisma.user.findFirst({ where: { id, practiceId } });
     if (!existing) throw new NotFoundException('User not found');
     if (!isActive && existing.role === Role.ADMIN) {
       await this.assertNotLastAdmin(practiceId, id);
     }
-    if (!isActive && existing.isActive === false) return existing;
-    return this.prisma.user.update({
+    if (!isActive && existing.isActive === false) return withPermissions(existing);
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { isActive },
       select: STAFF_SELECT,
     });
+    await this.audit.log({
+      practiceId,
+      actorId,
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: id,
+      detail: `${isActive ? 'Reactivated' : 'Deactivated'} ${existing.email}`,
+    });
+    return withPermissions(updated);
+  }
+
+  /**
+   * Replaces one account's permission overrides. A key listed in both lists is
+   * treated as denied, since the safer reading of a contradictory instruction is
+   * the one that grants less. Administrators keep account management regardless,
+   * so a practice cannot lock itself out of its own permissions screen.
+   */
+  async setPermissions(
+    practiceId: string,
+    id: string,
+    grant: PermissionKey[],
+    deny: PermissionKey[],
+    actorId?: string,
+  ) {
+    const existing = await this.prisma.user.findFirst({ where: { id, practiceId } });
+    if (!existing) throw new NotFoundException('User not found');
+    const denied = new Set(deny);
+    const overrides = {
+      grant: [...new Set(grant)].filter((key) => !denied.has(key)),
+      deny: [...denied],
+    };
+    if (existing.role === Role.ADMIN && denied.has(Permission.ACCOUNTS_MANAGE)) {
+      throw new BadRequestException(
+        'Administrators always keep account management; change the role instead',
+      );
+    }
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { permissionOverrides: overrides },
+      select: STAFF_SELECT,
+    });
+    await this.audit.log({
+      practiceId,
+      actorId,
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: id,
+      detail:
+        `Permissions for ${existing.email} — ` +
+        `granted: ${overrides.grant.join(', ') || 'none'}; ` +
+        `revoked: ${overrides.deny.join(', ') || 'none'}`,
+    });
+    return withPermissions(updated);
   }
 
   private async assertNotLastAdmin(practiceId: string, userId: string) {
@@ -135,9 +219,10 @@ export class UsersService {
     }
   }
 
-  requireAdminDirectory(role: string) {
-    if (role !== Role.ADMIN) {
-      throw new ForbiddenException('Staff directory is administrators only');
+  /** The full directory exposes roles and permissions, so it needs the capability. */
+  requireDirectoryAccess(user: { role: string; permissions?: string[] }) {
+    if (!user.permissions?.includes(Permission.ACCOUNTS_MANAGE)) {
+      throw new ForbiddenException('Staff directory requires account management permission');
     }
   }
 }

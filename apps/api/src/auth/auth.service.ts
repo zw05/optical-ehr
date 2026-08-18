@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { mergePreferences } from '../users/preferences';
+import { effectivePermissions } from './permissions';
 
 /**
  * Claims embedded in every access token. Attached to `request.user` by
@@ -17,6 +18,12 @@ export interface JwtPayload {
   /** Application role: DOCTOR | TECHNICIAN | OPTICIAN | RECEPTIONIST | ADMIN. */
   role: string;
   email: string;
+  /**
+   * Effective capability keys, resolved from the account row by JwtAuthGuard on
+   * every request. Not a token claim — it is never signed into the JWT, because
+   * a revoked permission must not survive in a token the user already holds.
+   */
+  permissions?: string[];
 }
 
 /**
@@ -79,6 +86,7 @@ export class AuthService {
         role: user.role,
       },
       preferences: mergePreferences(user.preferences),
+      permissions: effectivePermissions(user.role, user.permissionOverrides),
     };
   }
 }

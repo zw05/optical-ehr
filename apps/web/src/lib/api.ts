@@ -1,6 +1,7 @@
 'use client';
 
 import { clearRecentPatients } from './recentPatients';
+import { cachePermissions, clearPermissions } from './permissions';
 import {
   applyPreferences,
   cachePreferences,
@@ -39,12 +40,18 @@ export function getSessionUser(): SessionUser | null {
 
 /**
  * Persists token + user after a successful login.
- * Optionally seeds the preferences cache from the login payload.
+ * Optionally seeds the preferences and permission caches from the login payload.
  */
-export function setSession(token: string, user: SessionUser, preferences?: UserPreferences) {
+export function setSession(
+  token: string,
+  user: SessionUser,
+  preferences?: UserPreferences,
+  permissions?: string[],
+) {
   if (!canUseSessionStorage()) return;
   sessionStorage.setItem(TOKEN_KEY, token);
   sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (permissions) cachePermissions(permissions);
   if (preferences) {
     const merged = mergePreferences(preferences);
     cachePreferences(merged);
@@ -58,6 +65,7 @@ export function clearSession() {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
   }
+  clearPermissions();
   clearRecentPatients();
 }
 

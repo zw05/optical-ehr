@@ -30,7 +30,13 @@ export interface UpsertItemInput {
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(practiceId: string, kind?: InventoryKind, query?: string, includeInactive = false) {
+  async list(
+    practiceId: string,
+    kind?: InventoryKind,
+    query?: string,
+    includeInactive = false,
+    options: { lowStockOnly?: boolean } = {},
+  ) {
     const where: Prisma.InventoryItemWhereInput = {
       practiceId,
       ...(includeInactive ? {} : { isActive: true }),
@@ -43,7 +49,14 @@ export class InventoryService {
         { model: { contains: query, mode: 'insensitive' } },
       ];
     }
-    return this.prisma.inventoryItem.findMany({ where, orderBy: [{ brand: 'asc' }, { model: 'asc' }] });
+    const items = await this.prisma.inventoryItem.findMany({
+      where,
+      orderBy: [{ brand: 'asc' }, { model: 'asc' }],
+    });
+    // Prisma cannot compare two columns in a filter, so the reorder-point
+    // comparison happens here rather than in SQL.
+    if (!options.lowStockOnly) return items;
+    return items.filter((item) => item.reorderPoint != null && item.quantity <= item.reorderPoint);
   }
 
   upsert(practiceId: string, input: UpsertItemInput) {

@@ -1,12 +1,17 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
 import { Role } from '@prisma/client';
+import { PERMISSION_CATALOG, type PermissionKey } from '../auth/permissions';
+
+const PERMISSION_KEYS = PERMISSION_CATALOG.map((p) => p.key);
 
 export class CreateUserDto {
   @IsEmail()
@@ -63,4 +68,14 @@ export class UpdateUserDto {
 export class SetUserActiveDto {
   @IsBoolean()
   isActive!: boolean;
+}
+
+export class SetPermissionsDto {
+  @IsArray()
+  @IsIn(PERMISSION_KEYS, { each: true })
+  grant!: PermissionKey[];
+
+  @IsArray()
+  @IsIn(PERMISSION_KEYS, { each: true })
+  deny!: PermissionKey[];
 }

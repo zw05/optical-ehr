@@ -3,6 +3,8 @@ import { Response } from 'express';
 import { Public } from '../auth/public.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
+import { RequirePermission } from '../auth/permission.decorator';
+import { Permission } from '../auth/permissions';
 import { PracticeService } from './practice.service';
 import { UpdatePracticeDto, UploadPracticeLogoDto } from './practice.dto';
 
@@ -23,14 +25,16 @@ export class PracticeController {
     return this.practice.get(user.practiceId);
   }
 
-  /** PATCH /api/practice — any signed-in staff member updates the store profile. */
+  /** PATCH /api/practice — update the store profile. */
   @Patch()
+  @RequirePermission(Permission.STORE_PROFILE_EDIT)
   update(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePracticeDto) {
     return this.practice.update(user.practiceId, dto);
   }
 
   /** POST /api/practice/logo — upload PNG/JPEG practice logo. */
   @Post('logo')
+  @RequirePermission(Permission.STORE_PROFILE_EDIT)
   uploadLogo(@CurrentUser() user: JwtPayload, @Body() dto: UploadPracticeLogoDto) {
     return this.practice.uploadLogo(user.practiceId, dto.fileName, dto.contentType, dto.dataBase64);
   }

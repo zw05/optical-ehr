@@ -40,6 +40,9 @@ model Practice {
   acceptedPayers   AcceptedPayer[]
   lensPriceLists   LensPriceList[]
   opticalAddOns    OpticalAddOn[]
+  contactLensProducts ContactLensProduct[]
+  contactLensFees  ContactLensFee[]
+  codeEntries      CodeCatalogEntry[]
 }
 
 enum Role {
@@ -65,6 +68,10 @@ model User {
   isActive      Boolean  @default(true)
   // UI/accessibility preferences (theme, font scale, exam layout, etc.). Not PHI.
   preferences   Json?
+  // Per-user departures from the role's default capabilities.
+  // Shape: { grant: string[], deny: string[] } of permission keys; see auth/permissions.ts.
+  // Effective set = roleDefaults(role) + grant - deny. ADMIN always holds every key.
+  permissionOverrides Json?
   createdAt     DateTime @default(now())
 
   signedEncounters Encounter[]    @relation("SignedBy")
@@ -638,21 +645,30 @@ model LensPriceList {
   isActive   Boolean     @default(true)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
-  cells      LensPriceCell[]
+  ranges     LensPriceRange[]
 
   @@unique([practiceId, name])
 }
 
-model LensPriceCell {
-  id          String       @id @default(uuid())
+/// One priced power band on a lens price list, e.g. sphere -4.00..+4.00 with
+/// cylinder -2.00..0.00 at $89. Bands are minus-cyl, so cylMin <= cylMax <= 0.
+/// A quote picks the narrowest band containing the Rx; overlapping bands are
+/// resolved by sortOrder, letting a practice layer surcharge bands over a base
+/// band without rewriting the whole sheet. Imported full SPH x CYL grids are
+/// collapsed into the smallest set of bands that reproduces them exactly.
+model LensPriceRange {
+  id          String        @id @default(uuid())
   priceListId String
   priceList   LensPriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
-  sphere      Decimal      @db.Decimal(5, 2)
-  cylinder    Decimal      @db.Decimal(5, 2)
-  price       Decimal      @db.Decimal(10, 2)
+  label       String?
+  sphMin      Decimal       @db.Decimal(5, 2)
+  sphMax      Decimal       @db.Decimal(5, 2)
+  cylMin      Decimal       @db.Decimal(5, 2)
+  cylMax      Decimal       @db.Decimal(5, 2)
+  price       Decimal       @db.Decimal(10, 2)
+  sortOrder   Int           @default(0)
 
-  @@unique([priceListId, sphere, cylinder])
-  @@index([priceListId])
+  @@index([priceListId, sortOrder])
 }
 
 model OpticalAddOn {
@@ -667,6 +683,113 @@ model OpticalAddOn {
   updatedAt  DateTime         @updatedAt
 
   @@unique([practiceId, name])
+}
+
+// ---------- Contact lens pricing ----------
+
+enum ContactLensModality {
+  DAILY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  OTHER
+}
+
+enum ContactLensType {
+  SPHERICAL
+  TORIC
+  MULTIFOCAL
+  MULTIFOCAL_TORIC
+  RGP
+  SCLERAL
+  ORTHO_K
+  OTHER
+}
+
+/// A stocked contact lens the practice quotes and sells. Priced per box rather
+/// than per power: unlike spectacle lenses, parameters do not change the price,
+/// but annual-supply and six-month bundles are quoted at a discount off the
+/// per-box rate, so both are stored instead of derived.
+model ContactLensProduct {
+  id                 String              @id @default(uuid())
+  practiceId         String
+  practice           Practice            @relation(fields: [practiceId], references: [id])
+  brand              String
+  productName        String
+  modality           ContactLensModality @default(MONTHLY)
+  lensType           ContactLensType     @default(SPHERICAL)
+  lensesPerBox       Int?
+  /// Boxes one eye consumes in a year; an annual supply for both eyes bills twice this.
+  boxesPerYearPerEye Int                 @default(4)
+  pricePerBox        Decimal             @db.Decimal(10, 2)
+  /// Bundle prices per eye. Null means quote at the per-box rate instead.
+  annualSupplyPrice  Decimal?            @db.Decimal(10, 2)
+  sixMonthPrice      Decimal?            @db.Decimal(10, 2)
+  rebateNote         String?
+  notes              String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([practiceId, brand, productName])
+  @@index([practiceId, isActive])
+}
+
+enum ContactLensFeeKind {
+  FITTING_STANDARD
+  FITTING_TORIC
+  FITTING_MULTIFOCAL
+  FITTING_SPECIALTY
+  FITTING_ORTHO_K
+  EVALUATION
+  FOLLOW_UP
+  OTHER
+}
+
+/// Professional fees quoted alongside contact lens material, kept separate from
+/// product pricing because insurance allowances apply to them differently.
+model ContactLensFee {
+  id         String             @id @default(uuid())
+  practiceId String
+  practice   Practice           @relation(fields: [practiceId], references: [id])
+  name       String
+  kind       ContactLensFeeKind @default(OTHER)
+  price      Decimal            @db.Decimal(10, 2)
+  isActive   Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([practiceId, name])
+}
+
+// ---------- Billing & diagnosis code catalog ----------
+
+enum CodeSystem {
+  ICD10
+  CPT
+  HCPCS
+}
+
+/// Practice-maintained diagnosis and procedure codes offered in exam pickers.
+/// Seeded from the bundled optometry starter sets, then editable: a practice can
+/// add codes, retire ones it never bills, and flag the handful it uses daily so
+/// they sort to the top of the lookup.
+model CodeCatalogEntry {
+  id          String     @id @default(uuid())
+  practiceId  String
+  practice    Practice   @relation(fields: [practiceId], references: [id])
+  system      CodeSystem
+  code        String
+  description String
+  category    String?
+  isFavorite  Boolean    @default(false)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([practiceId, system, code])
+  @@index([practiceId, system, isActive])
 }
 
 // ---------- Recalls & tasks ----------

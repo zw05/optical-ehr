@@ -1,19 +1,26 @@
 import { LensDesign, OpticalAddOnKind } from '@prisma/client';
 import ExcelJS from 'exceljs';
-
-export interface ParsedCell {
-  sphere: number;
-  cylinder: number;
-  price: number;
-}
+import { quarterSteps, roundQuarter } from './optical-powers';
+import {
+  collapseGridToRanges,
+  describeRange,
+  type PriceCell,
+  type PriceRange,
+} from './price-ranges';
 
 export interface ParsedLensSheet {
   name: string;
   design: LensDesign;
   material: string;
   index: number | null;
-  cells: ParsedCell[];
+  ranges: PriceRange[];
+  /** How the sheet was written, surfaced in the import preview. */
+  source: 'bands' | 'grid';
+  /** Rows read from the sheet, before grid collapsing. */
+  cellCount: number;
   errors: string[];
+  /** Non-fatal notes worth showing before the user commits the import. */
+  warnings: string[];
 }
 
 export interface ParsedCoating {
@@ -31,9 +38,10 @@ export interface ParsedWorkbook {
 const DESIGNS = new Set(Object.values(LensDesign));
 const KINDS = new Set(Object.values(OpticalAddOnKind));
 
-function roundQuarter(n: number): number {
-  return Math.round(n * 4) / 4;
-}
+const BAND_HEADERS = ['Label', 'Sphere from', 'Sphere to', 'Cylinder from', 'Cylinder to', 'Price'];
+
+/** Caps how many cell-level complaints one sheet contributes to the preview. */
+const MAX_SHEET_ERRORS = 20;
 
 function asNumber(value: ExcelJS.CellValue): number | null {
   if (value == null || value === '') return null;
@@ -43,6 +51,15 @@ function asNumber(value: ExcelJS.CellValue): number | null {
   }
   const n = Number(String(value).replace(/[$,]/g, '').trim());
   return Number.isFinite(n) ? n : null;
+}
+
+function asText(value: ExcelJS.CellValue): string {
+  if (value == null) return '';
+  if (typeof value === 'object' && 'text' in value && typeof value.text === 'string') {
+    return value.text.trim();
+  }
+  if (typeof value === 'object' && 'result' in value) return String(value.result ?? '').trim();
+  return String(value).trim();
 }
 
 function parseKind(raw: string): OpticalAddOnKind {
@@ -55,10 +72,168 @@ function parseDesign(raw: string | undefined): LensDesign {
   if (!raw) return LensDesign.SV;
   const key = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (key === 'SINGLE_VISION' || key === 'SINGLEVISION') return LensDesign.SV;
+  if (key === 'PROGRESSIVE') return LensDesign.PAL;
   if (DESIGNS.has(key as LensDesign)) return key as LensDesign;
   return LensDesign.OTHER;
 }
 
+/** Reads the optional Design/Material/Index preamble above a sheet's table. */
+function readHeader(sheet: ExcelJS.Worksheet): {
+  design: LensDesign;
+  material: string;
+  index: number | null;
+  tableRow: number;
+} {
+  let design: LensDesign = LensDesign.SV;
+  let material = 'Unspecified';
+  let index: number | null = null;
+  let tableRow = 1;
+
+  for (let r = 1; r <= 8; r++) {
+    const label = asText(sheet.getRow(r).getCell(1).value).toLowerCase();
+    if (!label) continue;
+    if (label === 'design') design = parseDesign(asText(sheet.getRow(r).getCell(2).value));
+    else if (label === 'material') material = asText(sheet.getRow(r).getCell(2).value) || material;
+    else if (label === 'index') index = asNumber(sheet.getRow(r).getCell(2).value);
+    else {
+      tableRow = r;
+      break;
+    }
+  }
+  return { design, material, index, tableRow };
+}
+
+/** A band sheet leads its table with a "Label" column; a grid leads with "Sphere". */
+function isBandTable(sheet: ExcelJS.Worksheet, tableRow: number): boolean {
+  const first = asText(sheet.getRow(tableRow).getCell(1).value).toLowerCase();
+  return first === 'label' || first === 'band';
+}
+
+function parseBandTable(
+  sheet: ExcelJS.Worksheet,
+  tableRow: number,
+): { ranges: PriceRange[]; errors: string[] } {
+  const ranges: PriceRange[] = [];
+  const errors: string[] = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= tableRow) return;
+    const label = asText(row.getCell(1).value);
+    const sphA = asNumber(row.getCell(2).value);
+    const sphB = asNumber(row.getCell(3).value);
+    const cylA = asNumber(row.getCell(4).value);
+    const cylB = asNumber(row.getCell(5).value);
+    const price = asNumber(row.getCell(6).value);
+    if (sphA == null && sphB == null && cylA == null && cylB == null && price == null) return;
+    if (sphA == null || sphB == null || cylA == null || cylB == null) {
+      errors.push(`${sheet.name} row ${rowNumber}: incomplete power range`);
+      return;
+    }
+    if (price == null) {
+      errors.push(`${sheet.name} row ${rowNumber}: missing price`);
+      return;
+    }
+    const cylMin = roundQuarter(Math.min(cylA, cylB));
+    const cylMax = roundQuarter(Math.max(cylA, cylB));
+    if (cylMax > 0) {
+      errors.push(`${sheet.name} row ${rowNumber}: cylinder must be minus-cyl (zero or negative)`);
+      return;
+    }
+    ranges.push({
+      label: label || null,
+      sphMin: roundQuarter(Math.min(sphA, sphB)),
+      sphMax: roundQuarter(Math.max(sphA, sphB)),
+      cylMin,
+      cylMax,
+      price: Math.round(price * 100) / 100,
+      sortOrder: ranges.length,
+    });
+  });
+  return { ranges, errors };
+}
+
+/**
+ * Reports powers a grid skips over. A sheet that lists 0.00, -0.50, -1.00 says
+ * nothing about -0.25, and importing it leaves that power unpriced — which the
+ * dispensary only discovers when a patient with that Rx is standing there. The
+ * gap is real either way; naming it before the import is the useful part.
+ */
+function findAxisGaps(values: number[], axis: string): string[] {
+  const unique = [...new Set(values)].sort((a, b) => a - b);
+  if (unique.length < 2) return [];
+  const missing: number[] = [];
+  for (let i = 1; i < unique.length; i++) {
+    const steps = Math.round((unique[i] - unique[i - 1]) / 0.25);
+    for (let step = 1; step < steps; step++) {
+      missing.push(roundQuarter(unique[i - 1] + step * 0.25));
+    }
+  }
+  if (!missing.length) return [];
+  const shown = missing.slice(0, 4).map((v) => v.toFixed(2)).join(', ');
+  return [
+    `${axis} skips ${missing.length} quarter-dioptre ${
+      missing.length === 1 ? 'step' : 'steps'
+    } (${shown}${missing.length > 4 ? ', …' : ''}); those powers will be left unpriced.`,
+  ];
+}
+
+function parseGridTable(
+  sheet: ExcelJS.Worksheet,
+  tableRow: number,
+): { cells: PriceCell[]; errors: string[]; warnings: string[] } {
+  const cylinders: { col: number; cyl: number }[] = [];
+  sheet.getRow(tableRow).eachCell((cell, colNumber) => {
+    if (colNumber === 1) return;
+    const cyl = asNumber(cell.value);
+    if (cyl == null) return;
+    cylinders.push({ col: colNumber, cyl: roundQuarter(cyl) });
+  });
+
+  const cells: PriceCell[] = [];
+  const errors: string[] = [];
+  const complain = (message: string) => {
+    if (errors.length < MAX_SHEET_ERRORS) errors.push(message);
+  };
+
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= tableRow) return;
+    const sph = asNumber(row.getCell(1).value);
+    if (sph == null) return;
+    const sphere = roundQuarter(sph);
+    for (const { col, cyl } of cylinders) {
+      const raw = row.getCell(col).value;
+      if (raw == null || raw === '') continue;
+      if (cyl > 0) {
+        complain(`${sheet.name}!${row.getCell(col).address}: cylinder must be minus-cyl`);
+        continue;
+      }
+      const price = asNumber(raw);
+      if (price == null) {
+        complain(`${sheet.name}!${row.getCell(col).address}: not a number`);
+        continue;
+      }
+      cells.push({ sphere, cylinder: cyl, price: Math.round(price * 100) / 100 });
+    }
+  });
+
+  const warnings = [
+    ...findAxisGaps(
+      cells.map((c) => c.sphere),
+      'Sphere',
+    ),
+    ...findAxisGaps(
+      cylinders.map((c) => c.cyl),
+      'Cylinder',
+    ),
+  ];
+  return { cells, errors, warnings };
+}
+
+/**
+ * Reads a lens price workbook. Each sheet is one price list, written either as
+ * power bands or as a full SPH x CYL grid — grids are what labs send, so they
+ * are accepted unchanged and collapsed into bands on the way in. A sheet named
+ * "Coatings" or "Add-ons" holds add-on pricing instead of lens powers.
+ */
 export async function parsePriceWorkbook(buffer: Buffer): Promise<ParsedWorkbook> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
@@ -68,139 +243,177 @@ export async function parsePriceWorkbook(buffer: Buffer): Promise<ParsedWorkbook
 
   for (const sheet of wb.worksheets) {
     const name = sheet.name.trim();
-    if (/^coatings?$/i.test(name)) {
+    if (/^(coatings?|add[\s-]?ons?)$/i.test(name)) {
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-        const nameCell = String(row.getCell(1).value ?? '').trim();
-        if (!nameCell) return;
-        const kind = parseKind(String(row.getCell(2).value ?? 'OTHER'));
+        const addOnName = asText(row.getCell(1).value);
+        if (!addOnName) return;
+        const kind = parseKind(asText(row.getCell(2).value) || 'OTHER');
         const price = asNumber(row.getCell(3).value);
         if (price == null) {
-          coatingErrors.push(`${name}!A${rowNumber}: missing price`);
+          coatingErrors.push(`${name} row ${rowNumber}: missing price`);
           return;
         }
-        coatings.push({ name: nameCell, kind, price: Math.round(price * 100) / 100 });
+        coatings.push({ name: addOnName, kind, price: Math.round(price * 100) / 100 });
       });
       continue;
     }
 
-    let design: LensDesign = LensDesign.SV;
-    let material = 'CR-39';
-    let index: number | null = null;
-    let headerRow = 1;
-
-    const first = String(sheet.getRow(1).getCell(1).value ?? '').trim().toLowerCase();
-    if (first === 'design' || first === 'material' || first === 'index' || first === 'name') {
-      for (let r = 1; r <= 6; r++) {
-        const label = String(sheet.getRow(r).getCell(1).value ?? '').trim().toLowerCase();
-        const val = String(sheet.getRow(r).getCell(2).value ?? '').trim();
-        if (label === 'design') design = parseDesign(val);
-        else if (label === 'material') material = val || material;
-        else if (label === 'index') index = asNumber(sheet.getRow(r).getCell(2).value);
-        else if (label === 'sphere' || label === 'sph') {
-          headerRow = r;
-          break;
-        }
-        if (r === 6) headerRow = 7;
-      }
+    const { design, material, index, tableRow } = readHeader(sheet);
+    if (isBandTable(sheet, tableRow)) {
+      const { ranges, errors } = parseBandTable(sheet, tableRow);
+      lists.push({
+        name,
+        design,
+        material,
+        index,
+        ranges,
+        source: 'bands',
+        cellCount: ranges.length,
+        errors,
+        warnings: [],
+      });
+    } else {
+      const { cells, errors, warnings } = parseGridTable(sheet, tableRow);
+      lists.push({
+        name,
+        design,
+        material,
+        index,
+        ranges: collapseGridToRanges(cells),
+        source: 'grid',
+        cellCount: cells.length,
+        errors,
+        warnings,
+      });
     }
-
-    const cylRow = sheet.getRow(headerRow);
-    const cylinders: { col: number; cyl: number }[] = [];
-    cylRow.eachCell((cell, colNumber) => {
-      if (colNumber === 1) return;
-      const cyl = asNumber(cell.value);
-      if (cyl == null) return;
-      cylinders.push({ col: colNumber, cyl: roundQuarter(cyl) });
-    });
-
-    const cells: ParsedCell[] = [];
-    const errors: string[] = [];
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber <= headerRow) return;
-      const sph = asNumber(row.getCell(1).value);
-      if (sph == null) return;
-      const sphere = roundQuarter(sph);
-      for (const { col, cyl } of cylinders) {
-        const raw = row.getCell(col).value;
-        if (raw == null || raw === '') continue;
-        const price = asNumber(raw);
-        if (price == null) {
-          errors.push(`${name}!${row.getCell(col).address}: not a number`);
-          continue;
-        }
-        cells.push({ sphere, cylinder: cyl, price: Math.round(price * 100) / 100 });
-      }
-    });
-
-    lists.push({ name, design, material, index, cells, errors });
   }
 
   return { lists, coatings, coatingErrors };
 }
 
+function writeBandSheet(
+  sheet: ExcelJS.Worksheet,
+  meta: { design: string; material: string; index: number | null },
+  ranges: PriceRange[],
+) {
+  sheet.getCell('A1').value = 'Design';
+  sheet.getCell('B1').value = meta.design;
+  sheet.getCell('A2').value = 'Material';
+  sheet.getCell('B2').value = meta.material;
+  sheet.getCell('A3').value = 'Index';
+  sheet.getCell('B3').value = meta.index;
+  const header = sheet.getRow(5);
+  BAND_HEADERS.forEach((title, i) => {
+    header.getCell(i + 1).value = title;
+  });
+  header.font = { bold: true };
+  ranges.forEach((range, i) => {
+    const row = sheet.getRow(6 + i);
+    row.getCell(1).value = range.label ?? describeRange(range);
+    row.getCell(2).value = range.sphMax;
+    row.getCell(3).value = range.sphMin;
+    row.getCell(4).value = range.cylMax;
+    row.getCell(5).value = range.cylMin;
+    row.getCell(6).value = range.price;
+  });
+  sheet.getColumn(1).width = 34;
+  for (let c = 2; c <= 6; c++) sheet.getColumn(c).width = 14;
+}
+
+/**
+ * A starter workbook showing both accepted layouts: a band sheet to fill in by
+ * hand, and a grid sheet in the shape a lab price list usually arrives in.
+ */
 export async function buildPriceTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const sheet = wb.addWorksheet('Poly SV');
-  sheet.getCell('A1').value = 'Design';
-  sheet.getCell('B1').value = 'SV';
-  sheet.getCell('A2').value = 'Material';
-  sheet.getCell('B2').value = 'Polycarbonate';
-  sheet.getCell('A3').value = 'Index';
-  sheet.getCell('B3').value = 1.59;
-  const cyls = [0, -0.25, -0.5, -0.75, -1, -1.25, -1.5, -2, -3, -4];
-  sheet.getCell('A5').value = 'Sphere';
+  wb.creator = 'Optical EHR';
+
+  writeBandSheet(
+    wb.addWorksheet('Poly SV'),
+    { design: 'SV', material: 'Polycarbonate', index: 1.59 },
+    [
+      { label: 'Standard powers', sphMin: -6, sphMax: 4, cylMin: -2, cylMax: 0, price: 89 },
+      { label: 'High cylinder', sphMin: -6, sphMax: 4, cylMin: -4, cylMax: -2.25, price: 119 },
+      { label: 'High sphere', sphMin: -12, sphMax: -6.25, cylMin: -4, cylMax: 0, price: 149 },
+    ],
+  );
+
+  // The grid example is written in full quarter-dioptre steps, the way a lab
+  // sheet arrives. A grid that skipped steps would import with unpriced holes
+  // between the listed powers, so the shipped example must not teach that shape.
+  const gridSheet = wb.addWorksheet('CR39 SV (grid example)');
+  gridSheet.getCell('A1').value = 'Design';
+  gridSheet.getCell('B1').value = 'SV';
+  gridSheet.getCell('A2').value = 'Material';
+  gridSheet.getCell('B2').value = 'CR-39';
+  gridSheet.getCell('A3').value = 'Index';
+  gridSheet.getCell('B3').value = 1.5;
+  const cyls = quarterSteps(-2, 0).reverse();
+  const sphs = quarterSteps(-4, 2).reverse();
+  gridSheet.getCell('A5').value = 'Sphere';
   cyls.forEach((cyl, i) => {
-    sheet.getCell(5, i + 2).value = cyl;
+    gridSheet.getCell(5, i + 2).value = cyl;
   });
-  const spheres = [2, 1, 0, -1, -2, -4, -6];
-  spheres.forEach((sph, r) => {
-    sheet.getCell(6 + r, 1).value = sph;
-    sheet.getCell(6 + r, 2).value = 89;
+  gridSheet.getRow(5).font = { bold: true };
+  sphs.forEach((sph, r) => {
+    gridSheet.getCell(6 + r, 1).value = sph;
+    cyls.forEach((cyl, i) => {
+      gridSheet.getCell(6 + r, i + 2).value = Math.abs(sph) > 2 || cyl < -1 ? 119 : 79;
+    });
   });
 
   const coatings = wb.addWorksheet('Coatings');
-  coatings.addRow(['Name', 'Kind', 'Price']);
+  coatings.addRow(['Name', 'Kind', 'Price']).font = { bold: true };
   coatings.addRow(['Premium AR', 'AR', 79]);
   coatings.addRow(['Transitions', 'PHOTOCHROMIC', 95]);
-  coatings.addRow(['Blue light', 'BLUE_LIGHT', 45]);
+  coatings.addRow(['Polarized', 'POLARIZED', 99]);
+  coatings.addRow(['Blue light filter', 'BLUE_LIGHT', 45]);
+  coatings.getColumn(1).width = 24;
+  coatings.getColumn(2).width = 18;
 
-  const buf = await wb.xlsx.writeBuffer();
-  return Buffer.from(buf);
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-export async function buildListExport(
-  name: string,
-  design: string,
-  material: string,
-  index: number | null,
-  cells: ParsedCell[],
+/** Excel rejects these characters in a sheet name, and caps names at 31 chars. */
+const ILLEGAL_SHEET_CHARS = /[\\/*?:\[\]]/g;
+
+/** Exports current price lists and add-ons in the same shape import accepts. */
+export async function buildPriceExport(
+  lists: {
+    name: string;
+    design: string;
+    material: string;
+    index: number | null;
+    ranges: PriceRange[];
+  }[],
+  addOns: { name: string; kind: string; price: number }[],
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const sheet = wb.addWorksheet(name.slice(0, 31) || 'List');
-  sheet.getCell('A1').value = 'Design';
-  sheet.getCell('B1').value = design;
-  sheet.getCell('A2').value = 'Material';
-  sheet.getCell('B2').value = material;
-  sheet.getCell('A3').value = 'Index';
-  sheet.getCell('B3').value = index;
-  const spheres = [...new Set(cells.map((c) => c.sphere))].sort((a, b) => b - a);
-  const cyls = [...new Set(cells.map((c) => c.cylinder))].sort((a, b) => b - a);
-  sheet.getCell('A5').value = 'Sphere';
-  cyls.forEach((cyl, i) => {
-    sheet.getCell(5, i + 2).value = cyl;
-  });
-  const lookup = new Map(cells.map((c) => [`${c.sphere}|${c.cylinder}`, c.price]));
-  spheres.forEach((sph, r) => {
-    sheet.getCell(6 + r, 1).value = sph;
-    cyls.forEach((cyl, i) => {
-      const price = lookup.get(`${sph}|${cyl}`);
-      if (price != null) sheet.getCell(6 + r, i + 2).value = price;
-    });
-  });
-  const buf = await wb.xlsx.writeBuffer();
-  return Buffer.from(buf);
+  wb.creator = 'Optical EHR';
+  const used = new Set<string>();
+
+  for (const list of lists) {
+    let name = (list.name || 'List').replace(ILLEGAL_SHEET_CHARS, ' ').slice(0, 31).trim() || 'List';
+    let suffix = 2;
+    while (used.has(name.toLowerCase())) {
+      name = `${name.slice(0, 28)} ${suffix++}`;
+    }
+    used.add(name.toLowerCase());
+    writeBandSheet(wb.addWorksheet(name), list, list.ranges);
+  }
+  if (!lists.length) wb.addWorksheet('No price lists');
+
+  const coatings = wb.addWorksheet('Coatings');
+  coatings.addRow(['Name', 'Kind', 'Price']).font = { bold: true };
+  for (const addOn of addOns) coatings.addRow([addOn.name, addOn.kind, addOn.price]);
+  coatings.getColumn(1).width = 24;
+  coatings.getColumn(2).width = 18;
+
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+// ---------- Frames ----------
 
 export async function buildFramesTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -219,8 +432,24 @@ export async function buildFramesTemplate(): Promise<Buffer> {
     'Quantity',
     'Material',
     'UPC',
+  ]).font = { bold: true };
+  sheet.addRow([
+    'RAY-2140-52',
+    'Ray-Ban',
+    '2140',
+    'Tortoise',
+    '52-18-140',
+    '52',
+    '18',
+    '140',
+    45,
+    129,
+    4,
+    'Acetate',
+    '',
   ]);
-  sheet.addRow(['RAY-2140-52', 'Ray-Ban', '2140', 'Tortoise', '52-18-140', '52', '18', '140', 45, 129, 4, 'Acetate', '']);
+  sheet.getColumn(1).width = 18;
+  sheet.getColumn(2).width = 16;
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }
@@ -241,7 +470,9 @@ export interface ParsedFrameRow {
   upc?: string;
 }
 
-export async function parseFramesWorkbook(buffer: Buffer): Promise<{ rows: ParsedFrameRow[]; errors: string[] }> {
+export async function parseFramesWorkbook(
+  buffer: Buffer,
+): Promise<{ rows: ParsedFrameRow[]; errors: string[] }> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
   const sheet = wb.worksheets[0];
@@ -250,22 +481,22 @@ export async function parseFramesWorkbook(buffer: Buffer): Promise<{ rows: Parse
   if (!sheet) return { rows, errors: ['Workbook has no sheets'] };
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
-    const sku = String(row.getCell(1).value ?? '').trim();
+    const sku = asText(row.getCell(1).value);
     if (!sku) return;
     rows.push({
       sku,
-      brand: String(row.getCell(2).value ?? '').trim() || undefined,
-      model: String(row.getCell(3).value ?? '').trim() || undefined,
-      color: String(row.getCell(4).value ?? '').trim() || undefined,
-      size: String(row.getCell(5).value ?? '').trim() || undefined,
-      eye: String(row.getCell(6).value ?? '').trim() || undefined,
-      bridge: String(row.getCell(7).value ?? '').trim() || undefined,
-      temple: String(row.getCell(8).value ?? '').trim() || undefined,
+      brand: asText(row.getCell(2).value) || undefined,
+      model: asText(row.getCell(3).value) || undefined,
+      color: asText(row.getCell(4).value) || undefined,
+      size: asText(row.getCell(5).value) || undefined,
+      eye: asText(row.getCell(6).value) || undefined,
+      bridge: asText(row.getCell(7).value) || undefined,
+      temple: asText(row.getCell(8).value) || undefined,
       cost: asNumber(row.getCell(9).value) ?? undefined,
       retail: asNumber(row.getCell(10).value) ?? undefined,
       quantity: asNumber(row.getCell(11).value) ?? undefined,
-      material: String(row.getCell(12).value ?? '').trim() || undefined,
-      upc: String(row.getCell(13).value ?? '').trim() || undefined,
+      material: asText(row.getCell(12).value) || undefined,
+      upc: asText(row.getCell(13).value) || undefined,
     });
   });
   return { rows, errors };

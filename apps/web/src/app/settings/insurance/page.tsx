@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import MoneyInput from '@/components/MoneyInput';
 
 interface Payer {
   id: string;
@@ -148,15 +149,15 @@ export default function InsuranceSettingsPage() {
             </div>
             <div className="field">
               <label>Frame allowance</label>
-              <input value={form.frameAllowance} onChange={(e) => setForm({ ...form, frameAllowance: e.target.value })} />
+              <MoneyInput value={form.frameAllowance} onChange={(e) => setForm({ ...form, frameAllowance: e.target.value })} />
             </div>
             <div className="field">
               <label>Lens allowance</label>
-              <input value={form.lensAllowance} onChange={(e) => setForm({ ...form, lensAllowance: e.target.value })} />
+              <MoneyInput value={form.lensAllowance} onChange={(e) => setForm({ ...form, lensAllowance: e.target.value })} />
             </div>
             <div className="field">
               <label>Exam copay</label>
-              <input value={form.examCopay} onChange={(e) => setForm({ ...form, examCopay: e.target.value })} />
+              <MoneyInput value={form.examCopay} onChange={(e) => setForm({ ...form, examCopay: e.target.value })} />
             </div>
             <div className="field">
               <label>

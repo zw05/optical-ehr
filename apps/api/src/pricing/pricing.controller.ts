@@ -9,74 +9,125 @@ import {
   Put,
   Query,
   Res,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
-import { Role } from '@prisma/client';
-import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
+import { RequirePermission } from '../auth/permission.decorator';
+import { Permission } from '../auth/permissions';
 import { PricingService } from './pricing.service';
 import {
   CreateAddOnDto,
-  CreatePriceListDto,
+  CreateLensListDto,
   ImportWorkbookDto,
-  PutCellsDto,
+  PutRangesDto,
   UpdateAddOnDto,
-  UpdatePriceListDto,
+  UpdateLensListDto,
 } from './pricing.dto';
 
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** Refuses a base64 payload larger than this once decoded. */
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+function decodeWorkbook(dataBase64: string): Buffer {
+  const buffer = Buffer.from(dataBase64, 'base64');
+  if (buffer.length === 0) throw new BadRequestException('Uploaded file is empty');
+  if (buffer.length > MAX_UPLOAD_BYTES) {
+    throw new BadRequestException('Workbook is larger than 8 MB');
+  }
+  return buffer;
+}
+
+/**
+ * Spectacle lens pricing: power-banded price lists plus coatings and add-ons.
+ * Reading prices is open to any signed-in staff member because quoting a job at
+ * the dispensing table needs them; changing them needs the pricing capability.
+ */
 @Controller('pricing')
-@Roles(Role.ADMIN)
 export class PricingController {
   constructor(private readonly pricing: PricingService) {}
 
-  @Get('lists')
-  listLists(@CurrentUser() user: JwtPayload) {
-    return this.pricing.listPriceLists(user.practiceId);
+  @Get('lens-lists')
+  listLists(@CurrentUser() user: JwtPayload, @Query('all') all?: string) {
+    return this.pricing.listPriceLists(user.practiceId, all === '1' || all === 'true');
   }
 
-  @Post('lists')
-  createList(@CurrentUser() user: JwtPayload, @Body() dto: CreatePriceListDto) {
+  @Post('lens-lists')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
+  createList(@CurrentUser() user: JwtPayload, @Body() dto: CreateLensListDto) {
     return this.pricing.createPriceList(user.practiceId, dto);
   }
 
-  @Get('lists/:id')
+  @Get('lens-lists/template')
+  async template(@Res() res: Response) {
+    const buf = await this.pricing.templateBuffer();
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', 'attachment; filename="lens-price-template.xlsx"');
+    res.send(buf);
+  }
+
+  @Get('lens-lists/export')
+  async exportAll(@CurrentUser() user: JwtPayload, @Res() res: Response) {
+    const buf = await this.pricing.exportBuffer(user.practiceId);
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', 'attachment; filename="lens-prices.xlsx"');
+    res.send(buf);
+  }
+
+  /**
+   * POST /api/pricing/lens-lists/import — with `preview: true` returns what the
+   * workbook would change without writing anything; without it, applies the
+   * same plan and reports what it did.
+   */
+  @Post('lens-lists/import')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
+  importWorkbook(@CurrentUser() user: JwtPayload, @Body() dto: ImportWorkbookDto) {
+    return this.pricing.importWorkbook(
+      user.practiceId,
+      decodeWorkbook(dto.dataBase64),
+      dto.preview === true,
+    );
+  }
+
+  @Get('lens-lists/:id')
   getList(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.pricing.getPriceList(user.practiceId, id);
   }
 
-  @Patch('lists/:id')
+  @Patch('lens-lists/:id')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
   updateList(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: UpdatePriceListDto,
+    @Body() dto: UpdateLensListDto,
   ) {
     return this.pricing.updatePriceList(user.practiceId, id, dto);
   }
 
-  @Put('lists/:id/cells')
-  putCells(
+  @Put('lens-lists/:id/ranges')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
+  putRanges(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: PutCellsDto,
+    @Body() dto: PutRangesDto,
   ) {
-    return this.pricing.putCells(user.practiceId, id, dto.cells);
+    return this.pricing.putRanges(user.practiceId, id, dto.ranges);
   }
 
-  @Get('addons')
+  @Get('add-ons')
   listAddOns(@CurrentUser() user: JwtPayload, @Query('all') all?: string) {
     return this.pricing.listAddOns(user.practiceId, all === '1' || all === 'true');
   }
 
-  @Post('addons')
+  @Post('add-ons')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
   createAddOn(@CurrentUser() user: JwtPayload, @Body() dto: CreateAddOnDto) {
     return this.pricing.createAddOn(user.practiceId, dto);
   }
 
-  @Patch('addons/:id')
+  @Patch('add-ons/:id')
+  @RequirePermission(Permission.LENS_PRICING_EDIT)
   updateAddOn(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -85,6 +136,7 @@ export class PricingController {
     return this.pricing.updateAddOn(user.practiceId, id, dto);
   }
 
+  /** GET /api/pricing/quote — price one lens power plus selected add-ons. */
   @Get('quote')
   quote(
     @CurrentUser() user: JwtPayload,
@@ -95,33 +147,5 @@ export class PricingController {
   ) {
     const ids = addOnIds ? addOnIds.split(',').filter(Boolean) : [];
     return this.pricing.quote(user.practiceId, listId, Number(sphere), Number(cylinder), ids);
-  }
-
-  @Get('template')
-  async template(@CurrentUser() user: JwtPayload, @Res() res: Response) {
-    const buf = await this.pricing.templateBuffer(user.practiceId);
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader('Content-Disposition', 'attachment; filename="lens-price-template.xlsx"');
-    res.send(buf);
-  }
-
-  @Post('import')
-  importJson(@CurrentUser() user: JwtPayload, @Body() dto: ImportWorkbookDto) {
-    return this.pricing.importWorkbook(user.practiceId, Buffer.from(dto.dataBase64, 'base64'));
-  }
-
-  @Post('import-file')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
-  importFile(
-    @CurrentUser() user: JwtPayload,
-    @UploadedFile() file: { buffer: Buffer; originalname?: string } | undefined,
-  ) {
-    if (!file?.buffer) {
-      throw new BadRequestException('Upload an .xlsx file as field "file"');
-    }
-    return this.pricing.importWorkbook(user.practiceId, file.buffer);
   }
 }

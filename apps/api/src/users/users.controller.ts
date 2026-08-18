@@ -5,7 +5,9 @@ import { JwtPayload } from '../auth/auth.service';
 import { Roles } from '../auth/roles.decorator';
 import { applyPreferencePatch, mergePreferences, PartialUserPreferences } from './preferences';
 import { UpdatePreferencesDto } from './preferences.dto';
-import { CreateUserDto, SetUserActiveDto, UpdateUserDto } from './users.dto';
+import { CreateUserDto, SetPermissionsDto, SetUserActiveDto, UpdateUserDto } from './users.dto';
+import { RequirePermission } from '../auth/permission.decorator';
+import { PERMISSION_CATALOG, Permission } from '../auth/permissions';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -29,10 +31,19 @@ export class UsersController {
     @Query('all') all?: string,
   ) {
     if (all === '1' || all === 'true') {
-      this.users.requireAdminDirectory(user.role);
+      this.users.requireDirectoryAccess(user);
       return this.users.listDirectory(user.practiceId);
     }
     return this.users.listPicker(user.practiceId, clinical === 'true');
+  }
+
+  /**
+   * GET /api/users/me/permissions — what the signed-in user may do, plus the
+   * catalog, so the web app can hide sections it would only 403 on.
+   */
+  @Get('me/permissions')
+  myPermissions(@CurrentUser() user: JwtPayload) {
+    return { permissions: user.permissions ?? [], catalog: PERMISSION_CATALOG };
   }
 
   @Get('me/preferences')
@@ -60,24 +71,35 @@ export class UsersController {
   }
 
   @Post()
-  @Roles(Role.ADMIN)
+  @RequirePermission(Permission.ACCOUNTS_MANAGE)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateUserDto) {
     return this.users.create(user.practiceId, dto);
   }
 
   @Patch(':id/active')
-  @Roles(Role.ADMIN)
+  @RequirePermission(Permission.ACCOUNTS_MANAGE)
   setActive(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() dto: SetUserActiveDto,
   ) {
-    return this.users.setActive(user.practiceId, id, dto.isActive);
+    return this.users.setActive(user.practiceId, id, dto.isActive, user.sub);
   }
 
   @Patch(':id')
-  @Roles(Role.ADMIN)
+  @RequirePermission(Permission.ACCOUNTS_MANAGE)
   update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.users.update(user.practiceId, id, dto);
+  }
+
+  /** PATCH /api/users/:id/permissions — replace one account's grant/deny lists. */
+  @Patch(':id/permissions')
+  @RequirePermission(Permission.ACCOUNTS_MANAGE)
+  setPermissions(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: SetPermissionsDto,
+  ) {
+    return this.users.setPermissions(user.practiceId, id, dto.grant, dto.deny, user.sub);
   }
 }

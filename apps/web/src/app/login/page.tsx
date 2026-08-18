@@ -30,8 +30,9 @@ export default function LoginPage() {
         accessToken: string;
         user: SessionUser;
         preferences?: import('@/lib/preferences').UserPreferences;
+        permissions?: string[];
       } = await response.json();
-      setSession(data.accessToken, data.user, data.preferences);
+      setSession(data.accessToken, data.user, data.preferences, data.permissions);
       const landing = data.preferences?.dashboard?.landingRoute || '/dashboard';
       router.push(landing);
     } catch (err) {

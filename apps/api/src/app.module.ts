@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { PermissionsGuard } from './auth/permissions.guard';
 import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { PatientsModule } from './patients/patients.module';
@@ -22,6 +23,8 @@ import { AcceptedPayersModule } from './accepted-payers/accepted-payers.module';
 import { UsersModule } from './users/users.module';
 import { CodesModule } from './codes/codes.module';
 import { PracticeModule } from './practice/practice.module';
+import { PricingModule } from './pricing/pricing.module';
+import { ContactLensPricingModule } from './contact-lens-pricing/contact-lens-pricing.module';
 
 @Module({
   imports: [
@@ -44,10 +47,13 @@ import { PracticeModule } from './practice/practice.module';
     UsersModule,
     CodesModule,
     PracticeModule,
+    PricingModule,
+    ContactLensPricingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })

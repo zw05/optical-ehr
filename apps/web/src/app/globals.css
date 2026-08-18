@@ -2818,3 +2818,150 @@ html[data-reduced-motion='on'] *::after {
     color: #000;
   }
 }
+/* Store settings: catalog tables, import preview, band editor */
+.data-table {
+  margin-top: 0.5rem;
+}
+
+.selected-row > td {
+  background: var(--panel-header-bg);
+}
+
+/* File inputs are unstyleable, so the control is a label wrapping a hidden input. */
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-min-height);
+  padding: 0 0.9rem;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.file-button:hover {
+  border-color: var(--accent);
+}
+
+.file-button.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.file-button.disabled:hover {
+  border-color: var(--border-strong);
+}
+
+.import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.import-preview {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.import-preview h3 {
+  margin-top: 0;
+}
+
+.import-preview table {
+  font-size: 0.86rem;
+}
+
+.band-editor {
+  overflow-x: auto;
+}
+
+.band-editor input {
+  min-width: 5.5rem;
+}
+
+.band-editor td {
+  padding: 0.3rem 0.35rem;
+}
+
+.import-warning {
+  color: var(--warning, #a15c00);
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+}
+
+/* Paged catalog tables */
+.pager-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.pager-size select {
+  width: auto;
+  min-width: 4.5rem;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.85rem;
+}
+
+.pager-page {
+  min-width: 2.4rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pager-gap {
+  padding: 0 0.2rem;
+  color: var(--text-muted);
+}
+
+/* Price fields: a faded currency mark that stays visible while typing. */
+.money-input {
+  position: relative;
+  display: block;
+}
+
+.money-input::before {
+  content: '$';
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.92rem;
+  /* The same muted tone as the field's own label, so the mark reads as a hint
+     rather than as part of the value. No extra opacity on top: the token is
+     already the design's faded level, and dimming it twice made it hard to
+     see against the input. */
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.money-input input {
+  padding-left: 1.55rem;
+}
