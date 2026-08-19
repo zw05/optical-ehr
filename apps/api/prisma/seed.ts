@@ -67,6 +67,7 @@ async function main() {
     ['Spectacle Rx', 'spectacle-rx'],
     ['Contact Lens Rx', 'contact-lens-rx'],
     ['Exam Summary', 'exam-summary'],
+    ['Order Summary', 'order-summary'],
   ] as const) {
     const existing = await prisma.reportTemplate.findFirst({
       where: { practiceId: practice.id, kind },
@@ -120,12 +121,15 @@ async function main() {
     }
   }
 
+  // Vision plans, then the Medicare Advantage carriers the practice bills
+  // through. Straight Medicare is deliberately absent — it is not accepted.
   for (const [name, isVision] of [
-    ['VSP', true],
     ['EyeMed', true],
     ['Spectera', true],
-    ['Medicare', false],
     ['Davis Vision', true],
+    ['Healthfirst', false],
+    ['UnitedHealthcare', false],
+    ['Fidelis Care', false],
   ] as const) {
     await prisma.acceptedPayer.upsert({
       where: { practiceId_name: { practiceId: practice.id, name } },

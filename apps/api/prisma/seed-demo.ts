@@ -454,9 +454,9 @@ async function main() {
     create: {
       id: IDS.routine.insurance,
       patientId: IDS.routine.patient,
-      payerName: 'VSP',
-      planName: 'VSP Choice',
-      memberId: 'VSP-4471902',
+      payerName: 'EyeMed',
+      planName: 'EyeMed Insight',
+      memberId: 'EYE-4471902',
       groupNumber: 'GRP-2210',
       isVision: true,
       priority: 1,
@@ -578,8 +578,8 @@ async function main() {
     create: {
       id: IDS.complex.insurance,
       patientId: IDS.complex.patient,
-      payerName: 'Medicare',
-      planName: 'Medicare Part B',
+      payerName: 'Fidelis Care',
+      planName: 'Fidelis Medicare Advantage',
       memberId: '1EG4-TE5-MK73',
       isVision: false,
       priority: 1,

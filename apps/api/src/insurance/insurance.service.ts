@@ -36,6 +36,9 @@ export class InsuranceService {
     return this.prisma.insurancePolicy.findMany({
       where: { patientId },
       orderBy: { priority: 'asc' },
+      // The payer carries the practice's default allowances and copays, which
+      // seed the benefit worksheet when an order is written against a policy.
+      include: { acceptedPayer: true },
     });
   }
 

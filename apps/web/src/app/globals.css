@@ -980,6 +980,166 @@ a.button-link:hover {
   margin-top: 0;
 }
 
+/* The order dialog carries a job spec plus a pricing panel, so it runs wider
+   than the booking dialog it shares a backdrop with. */
+.order-dialog {
+  max-width: 68rem;
+}
+
+.order-dialog-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Pricing stays in view while the spec column scrolls. */
+.order-pricing {
+  position: sticky;
+  top: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: var(--surface-alt, var(--surface));
+}
+
+.order-pricing h3 {
+  margin-top: 0;
+}
+
+.order-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.order-timeline li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-timeline li:last-child {
+  border-bottom: none;
+}
+
+.order-timeline li p {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+}
+
+/* Row action menu — modelled on the search suggestion popup, but right-aligned
+   so it opens inward from the last column instead of off the table edge. */
+.row-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.row-menu-trigger {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.row-menu-list {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 40;
+  min-width: 10rem;
+  padding: 0.25rem 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(16, 51, 74, 0.12);
+}
+
+.row-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+  background: var(--surface-hover, rgba(16, 51, 74, 0.06));
+}
+
+/* Deliberately not `.danger`: that name is the app's filled red button, whose
+   `button.danger` rule would paint this item as a solid red block. */
+.row-menu-item.is-danger {
+  background: transparent;
+  color: var(--danger, #b3261e);
+}
+
+.order-pricing-heading {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, inherit);
+}
+
+.order-benefit-popover {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  background: var(--surface);
+}
+
+.order-benefit-popover ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.order-benefit-popover p {
+  margin: 0.4rem 0 0;
+}
+
+.order-pricing-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  font-size: 0.9rem;
+}
+
+.order-pricing-row span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.order-pricing-row.total,
+.order-pricing-row.balance {
+  border-top: 1px solid var(--border);
+  margin-top: 0.35rem;
+  padding-top: 0.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .order-dialog-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-pricing {
+    position: static;
+  }
+}
+
 @media (max-width: 1100px) {
   .panel-grid {
     grid-template-columns: 1fr 1fr;

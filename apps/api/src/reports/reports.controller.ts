@@ -13,7 +13,7 @@ class CreateReportTemplateDto {
   name!: string;
 
   @IsString()
-  @IsIn(['spectacle-rx', 'contact-lens-rx', 'exam-summary'])
+  @IsIn(['spectacle-rx', 'contact-lens-rx', 'exam-summary', 'order-summary'])
   kind!: string;
 
   @IsObject()
@@ -30,7 +30,7 @@ class PreviewLayoutDto {
   layout!: ReportLayout;
 
   @IsOptional()
-  @IsIn(['spectacle-rx', 'contact-lens-rx', 'exam-summary'])
+  @IsIn(['spectacle-rx', 'contact-lens-rx', 'exam-summary', 'order-summary'])
   kind?: string;
 }
 
@@ -151,6 +151,23 @@ export class ReportsController {
       prescriptionId,
       user,
     );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Report-Id', report.id);
+    res.send(pdf);
+  }
+
+  /**
+   * POST /api/reports/orders/:orderId — generate, store, and return the order
+   * job paper. Available at any order status, including DRAFT.
+   */
+  @Post('orders/:orderId')
+  @Roles(Role.DOCTOR, Role.OPTICIAN, Role.RECEPTIONIST)
+  async generateForOrder(
+    @CurrentUser() user: JwtPayload,
+    @Param('orderId') orderId: string,
+    @Res() res: Response,
+  ) {
+    const { report, pdf } = await this.reports.generateOrderReport(user.practiceId, orderId, user);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('X-Report-Id', report.id);
     res.send(pdf);
