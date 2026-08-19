@@ -7,11 +7,18 @@ import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import { AttachedDocs } from '@/components/exam/AttachedDocs';
 import { FieldRenderer, markAllRosNegative } from '@/components/exam/FieldRenderer';
+import { IntakeHistoryPanel } from '@/components/exam/IntakeHistoryPanel';
 import { PatientBanner } from '@/components/exam/PatientBanner';
 import { TabStrip } from '@/components/TabStrip';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { api, getSessionUser } from '@/lib/api';
-import { EXAM_TABS } from './examDefinition';
+import {
+  EXAM_TABS,
+  normalPatchForSection,
+  normalPatchForTab,
+  sectionHasNormals,
+  tabsWithNormals,
+} from './examDefinition';
 
 interface TemplateSection {
   key: string;
@@ -144,6 +151,8 @@ export default function ExamPage() {
     }
   }, [examPrefs.defaultTab]);
 
+  const clinicalData = encounter?.clinicalData ?? {};
+
   const requiredTabKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const section of encounter?.template.sections ?? []) {
@@ -170,8 +179,12 @@ export default function ExamPage() {
     for (const tab of EXAM_TABS) {
       if (!seen.has(tab.key) && !hidden.has(tab.key)) result.push(tab);
     }
-    return result;
-  }, [examPrefs.hiddenTabs, examPrefs.tabOrder, requiredTabKeys]);
+    // Superseded tabs only appear on encounters that actually recorded them, so
+    // old exams stay readable without offering the old fields for new work.
+    return result.filter(
+      (tab) => !tab.legacy || Object.keys(clinicalData[tab.key] ?? {}).length > 0,
+    );
+  }, [examPrefs.hiddenTabs, examPrefs.tabOrder, requiredTabKeys, clinicalData]);
 
   useEffect(() => {
     if (!visibleTabs.some((t) => t.key === activeTab) && visibleTabs.length > 0) {
@@ -246,6 +259,33 @@ export default function ExamPage() {
         },
       };
     });
+  }
+
+  /**
+   * Fills every objective finding with its normal value in one action, so a
+   * routine exam is recorded by exception. Only blank fields are touched —
+   * anything already answered is left as the examiner recorded it.
+   */
+  function markExamNormal() {
+    setEncounter((prev) => {
+      if (!prev) return prev;
+      const nextClinical = { ...prev.clinicalData };
+      for (const tab of tabsWithNormals()) {
+        const current = { ...(nextClinical[tab.key] ?? {}) };
+        for (const [key, value] of Object.entries(normalPatchForTab(tab))) {
+          const existing = current[key];
+          const blank =
+            existing === undefined ||
+            existing === '' ||
+            (Array.isArray(existing) && existing.length === 0);
+          if (blank) current[key] = value;
+        }
+        nextClinical[tab.key] = current;
+      }
+      return { ...prev, clinicalData: nextClinical };
+    });
+    setToast('Normal findings filled in — review before signing');
+    setTimeout(() => setToast(null), 2500);
   }
 
   function setMeta(patch: Partial<ExamMeta>) {
@@ -381,6 +421,16 @@ export default function ExamPage() {
     if (tab.stub) {
       return <p className="muted">This section is coming soon.</p>;
     }
+    // The intake questionnaire lives on the patient chart, not this encounter.
+    if (tab.key === 'history') {
+      return (
+        <IntakeHistoryPanel
+          patientId={encounter!.patient.id}
+          encounterId={encounter!.id}
+          readOnly={readOnly}
+        />
+      );
+    }
     // Attached docs are Document rows, not clinicalData — own component.
     if (tab.key === 'attachedDocs') {
       return (
@@ -410,6 +460,26 @@ export default function ExamPage() {
             {section.title && tab.key !== 'hpi' && (
               <div className="exam-section-header">
                 <h2>{section.title}</h2>
+                {!readOnly && sectionHasNormals(section) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSectionBulk(tab.key, normalPatchForSection(section))}
+                  >
+                    All normal
+                  </button>
+                )}
+              </div>
+            )}
+            {!section.title && !readOnly && sectionHasNormals(section) && (
+              <div className="toolbar">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setSectionBulk(tab.key, normalPatchForSection(section))}
+                >
+                  All normal
+                </button>
               </div>
             )}
             <div className="exam-field-grid" data-columns={fieldColumns}>
@@ -475,6 +545,9 @@ export default function ExamPage() {
         <div className="exam-actions">
           {!readOnly && (
             <>
+              <button type="button" className="secondary" onClick={markExamNormal}>
+                Normal exam
+              </button>
               <button type="button" onClick={save} disabled={saveState === 'saving'}>
                 {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : 'Save Exam'}
               </button>

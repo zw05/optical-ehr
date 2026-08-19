@@ -252,6 +252,51 @@ export function FieldRenderer({
       );
     }
 
+    case 'eyeFindingRow': {
+      const row = normalizeEyeFinding(value);
+      const tick = field.normalLabel ?? 'nl';
+      function setEye(eye: 'od' | 'os', patch: { nl?: boolean; note?: string }) {
+        onChange(field.key, { ...row, [eye]: { ...row[eye], ...patch } });
+      }
+      return (
+        <div className="exam-eye-row">
+          <div className="exam-eye-label">{field.label}</div>
+          {(['od', 'os'] as const).map((eye) => (
+            <div key={eye} className="exam-eye-cell">
+              <label className="exam-choice">
+                <input
+                  type="checkbox"
+                  disabled={disabled}
+                  checked={Boolean(row[eye].nl)}
+                  onChange={(e) => setEye(eye, { nl: e.target.checked })}
+                />
+                {eye.toUpperCase()} {tick}
+              </label>
+              {!row[eye].nl && (
+                <input
+                  className="exam-eye-note"
+                  disabled={disabled}
+                  placeholder={`${eye.toUpperCase()} finding`}
+                  value={row[eye].note ?? ''}
+                  onChange={(e) => setEye(eye, { note: e.target.value })}
+                />
+              )}
+            </div>
+          ))}
+          {!disabled && (
+            <button
+              type="button"
+              className="secondary exam-eye-copy"
+              title="Copy the OD finding to OS"
+              onClick={() => onChange(field.key, { od: row.od, os: { ...row.od } })}
+            >
+              OD → OS
+            </button>
+          )}
+        </div>
+      );
+    }
+
     case 'externalExam':
       return (
         <ExternalExam
@@ -302,6 +347,32 @@ export function FieldRenderer({
     default:
       return null;
   }
+}
+
+/**
+ * Reads a per-eye finding, tolerating the single-WNL shape these rows used
+ * before the exam split them by eye — an old `{ wnl: true }` reads as both eyes
+ * normal, and its note carries over to both.
+ */
+function normalizeEyeFinding(raw: unknown): {
+  od: { nl?: boolean; note?: string };
+  os: { nl?: boolean; note?: string };
+} {
+  const empty = { od: {}, os: {} };
+  if (!raw || typeof raw !== 'object') return empty;
+  const v = raw as Record<string, unknown>;
+  if ('od' in v || 'os' in v) {
+    const eye = (k: string) => {
+      const cell = v[k];
+      return cell && typeof cell === 'object' ? (cell as { nl?: boolean; note?: string }) : {};
+    };
+    return { od: eye('od'), os: eye('os') };
+  }
+  if ('wnl' in v || 'notes' in v) {
+    const legacy = { nl: Boolean(v.wnl), note: typeof v.notes === 'string' ? v.notes : '' };
+    return { od: { ...legacy }, os: { ...legacy } };
+  }
+  return empty;
 }
 
 /** Shortcut used by ROS tab — mark all systems negative. */

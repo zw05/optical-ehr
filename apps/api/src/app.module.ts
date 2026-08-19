@@ -9,6 +9,7 @@ import { PermissionsGuard } from './auth/permissions.guard';
 import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { PatientsModule } from './patients/patients.module';
+import { PatientHistoryModule } from './patient-history/patient-history.module';
 import { InsuranceModule } from './insurance/insurance.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { EncountersModule } from './encounters/encounters.module';
@@ -33,6 +34,7 @@ import { ContactLensPricingModule } from './contact-lens-pricing/contact-lens-pr
     AuthModule,
     AuditModule,
     PatientsModule,
+    PatientHistoryModule,
     InsuranceModule,
     SchedulingModule,
     EncountersModule,

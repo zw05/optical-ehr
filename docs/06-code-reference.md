@@ -179,6 +179,32 @@ Global interceptor: AuditInterceptor (log PHI access after each call)
 | `POST /api/templates` | Create template |
 | `POST /api/templates/:id/versions` | Publish new version |
 
+### `PatientHistoryService` (`patient-history/patient-history.service.ts`)
+
+The practice's paper intake page — Social, Family, Review of Systems, and Past
+Medical History — lives on the **chart**, not the visit: the patient answers it
+once and a provider re-confirms it at each exam. That is what the paper form's
+"Re-Reviewed Date / Dr.'s Signature" lines are for, and it means a returning
+patient is one click instead of thirty questions.
+
+| Method | What it does |
+| ------ | ------------ |
+| `get(practiceId, patientId)` | Answers plus the re-review trail. Returns an empty questionnaire before the patient has filled one in. |
+| `update(practiceId, patientId, dto)` | **Replaces** the answer set (the page saves as one document, so a merge could not express clearing an answer). Sanitizes entry-by-entry. |
+| `addReview(practiceId, patientId, reviewedById, dto)` | Doctor only. Appends one re-review line, with or without changes noted. |
+
+Answers are a JSON map of `questionKey -> { status, detail }`. The question
+catalog lives with the form in `web/src/lib/intakeHistory.ts`, so the service
+validates *shape* rather than membership and questions can be added or reworded
+without an API deploy — the global `forbidNonWhitelisted` pipe cannot validate a
+dynamic-key map, so `sanitize()` does that work and is covered by unit tests.
+
+| Route | Description |
+| ----- | ----------- |
+| `GET /api/patients/:id/intake-history` | Answers + review trail |
+| `PUT /api/patients/:id/intake-history` | Replace answers |
+| `POST /api/patients/:id/intake-history/review` | Doctor's re-review line |
+
 ---
 
 ## Prescriptions
@@ -471,7 +497,7 @@ deliberately keep a plain input.
 | Patients | `app/patients/page.tsx` | Search + register new patient. |
 | Patient chart | `app/patients/[id]/page.tsx` | Demographics, insurance, exams (clinical roles), Rx list, print finalized Rx PDF. |
 | Schedule | `app/schedule/page.tsx` | Day calendar; confirm, check in, complete, cancel appointments. |
-| Exam | `app/exams/[id]/page.tsx` | Template-driven exam form; save draft; doctor sign & addenda. |
+| Exam | `app/exams/[id]/page.tsx` | Template-driven exam form; save draft; doctor sign & addenda. Findings are recorded **by exception**: "Normal exam" and per-section "All normal" fill every blank finding with its normal value, so a routine visit only needs the abnormals touched. |
 | Orders | `app/orders/page.tsx` | Optical order queue; advance status; remake. |
 | Recalls | `app/recalls/page.tsx` | Recall outreach work list. |
 | Inventory | `app/inventory/page.tsx` | Frame/CL trial stock; adjust quantities. |
@@ -497,6 +523,8 @@ See `apps/api/prisma/schema.prisma` for full definitions.
 | `User` | Staff accounts, roles, doctor license/NPI, per-user permission overrides. |
 | `Patient` | Demographics, MRN, merge pointer. |
 | `PatientHistory` | Medical/ocular/allergy/medication/diagnosis rows. |
+| `PatientIntakeHistory` | The paper intake questionnaire, kept on the chart as a `questionKey -> { status, detail }` map. |
+| `PatientHistoryReview` | Append-only "Re-Reviewed Date / Dr.'s Signature" lines against that questionnaire. |
 | `InsurancePolicy` | Payer/member details + verification status. |
 | `Appointment` / `AppointmentType` | Scheduling. |
 | `ExamTemplate` / `Encounter` / `Addendum` | Configurable exams + signed records. |

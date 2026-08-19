@@ -5,7 +5,7 @@
 
 export type FieldOption = { value: string; label: string };
 
-export type ExamField =
+export type ExamField = (
   | {
       type: 'text' | 'textarea' | 'number';
       key: string;
@@ -94,7 +94,26 @@ export type ExamField =
       type: 'externalExam';
       key: string;
       label: string;
-    };
+    }
+  | {
+      /**
+       * A finding recorded per eye, as the paper form does: one `nl` tick for OD
+       * and one for OS, each opening a note when it is not normal.
+       */
+      type: 'eyeFindingRow';
+      key: string;
+      label: string;
+      /** Tick label; the paper prints "nl". */
+      normalLabel?: string;
+    }
+) & {
+  /**
+   * The value this field takes on a wholly normal exam. Fields that declare one
+   * are filled by the "All normal" actions, so a routine visit is recorded by
+   * exception rather than field by field.
+   */
+  normal?: unknown;
+};
 
 export interface ExamSection {
   title?: string;
@@ -105,6 +124,11 @@ export interface ExamTab {
   key: string;
   label: string;
   stub?: boolean;
+  /**
+   * Superseded by the chart-level History tab. Kept so exams recorded before the
+   * move still render their stored answers; hidden on encounters that have none.
+   */
+  legacy?: boolean;
   sections: ExamSection[];
 }
 
@@ -175,8 +199,15 @@ export const EXAM_TABS: ExamTab[] = [
     ],
   },
   {
+    // Rendered from the patient's chart, not this encounter — see IntakeHistoryPanel.
+    key: 'history',
+    label: 'History',
+    sections: [],
+  },
+  {
     key: 'socialHistory',
     label: 'Social History',
+    legacy: true,
     sections: [
       {
         fields: [
@@ -261,6 +292,7 @@ export const EXAM_TABS: ExamTab[] = [
   {
     key: 'medicalHistory',
     label: 'Medical History',
+    legacy: true,
     sections: [
       {
         title: 'Systemic conditions',
@@ -359,6 +391,7 @@ export const EXAM_TABS: ExamTab[] = [
   {
     key: 'ros',
     label: 'ROS',
+    legacy: true,
     sections: [
       {
         title: 'Review of Systems',
@@ -482,17 +515,19 @@ export const EXAM_TABS: ExamTab[] = [
       {
         title: 'Pupils / EOM / Fields',
         fields: [
-          { type: 'checkbox', key: 'perrla', label: 'PERRLA', width: 'third' },
+          { type: 'checkbox', key: 'perrla', label: 'PERRLA', width: 'third', normal: true },
           {
             type: 'radio',
             key: 'apd',
-            label: 'APD',
+            // The paper prints this as "PERRLA ( )MG" — a Marcus Gunn pupil.
+            label: 'APD / Marcus Gunn (MG)',
             options: [
               { value: 'none', label: 'None' },
               { value: 'od', label: 'OD' },
               { value: 'os', label: 'OS' },
             ],
             width: 'third',
+            normal: 'none',
           },
           {
             type: 'text',
@@ -509,6 +544,7 @@ export const EXAM_TABS: ExamTab[] = [
               { value: 'full', label: 'Full' },
               { value: 'restricted', label: 'Restricted' },
             ],
+            normal: 'full',
             width: 'half',
           },
           {
@@ -525,6 +561,7 @@ export const EXAM_TABS: ExamTab[] = [
               { value: 'full', label: 'Full' },
               { value: 'restricted', label: 'Restricted' },
             ],
+            normal: 'full',
             width: 'half',
           },
           {
@@ -535,6 +572,7 @@ export const EXAM_TABS: ExamTab[] = [
               { value: 'full', label: 'Full' },
               { value: 'restricted', label: 'Restricted' },
             ],
+            normal: 'full',
             width: 'half',
           },
         ],
@@ -609,6 +647,22 @@ export const EXAM_TABS: ExamTab[] = [
               { value: 'deficient', label: 'Deficient' },
             ],
             width: 'third',
+            normal: 'normal',
+          },
+          {
+            // The paper records plates read out of 7, per eye.
+            type: 'text',
+            key: 'colorPlatesOd',
+            label: 'Color plates OD (of 7)',
+            placeholder: 'e.g. 7',
+            width: 'third',
+          },
+          {
+            type: 'text',
+            key: 'colorPlatesOs',
+            label: 'Color plates OS (of 7)',
+            placeholder: 'e.g. 7',
+            width: 'third',
           },
           {
             type: 'text',
@@ -629,9 +683,23 @@ export const EXAM_TABS: ExamTab[] = [
         title: 'Refraction',
         fields: [
           rxBlock('currentRx', 'Current Rx'),
-          rxBlock('autorefraction', 'Autorefraction'),
-          rxBlock('manifest', 'Manifest refraction'),
+          rxBlock('autorefraction', 'Autorefraction (OBJ)'),
+          rxBlock('manifest', 'Manifest refraction (SUBJ)'),
           rxBlock('finalRx', 'Final Rx'),
+          {
+            type: 'text',
+            key: 'keratometryOd',
+            label: 'K OD',
+            placeholder: 'e.g. 43.00 / 44.00 @ 180',
+            width: 'half',
+          },
+          {
+            type: 'text',
+            key: 'keratometryOs',
+            label: 'K OS',
+            placeholder: 'e.g. 43.00 / 44.00 @ 180',
+            width: 'half',
+          },
           {
             type: 'checkbox',
             key: 'cycloplegicEnabled',
@@ -717,6 +785,17 @@ export const EXAM_TABS: ExamTab[] = [
         ],
       },
       {
+        title: 'Slit lamp (SLE)',
+        fields: [
+          { type: 'eyeFindingRow', key: 'sleLidsLashes', label: 'Lids & lashes (L+L)', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'sleCornea', label: 'Cornea (K)', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'sleConjunctiva', label: 'Conjunctiva (C)', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'sleIris', label: 'Iris', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'sleLens', label: 'Lens', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'sleAnteriorChamber', label: 'Anterior chamber (AC)', normal: { od: { nl: true }, os: { nl: true } } },
+        ],
+      },
+      {
         title: 'Intraocular pressure',
         fields: [
           {
@@ -727,6 +806,7 @@ export const EXAM_TABS: ExamTab[] = [
               { value: 'nct', label: 'NCT' },
               { value: 'gat', label: 'GAT' },
               { value: 'icare', label: 'iCare' },
+              { value: 'fingerTension', label: 'Finger tension' },
             ],
             width: 'full',
           },
@@ -736,30 +816,67 @@ export const EXAM_TABS: ExamTab[] = [
         ],
       },
       {
-        title: 'Internal / fundus',
+        title: 'Dilation',
         fields: [
           {
             type: 'radio',
             key: 'dilated',
-            label: 'Dilated',
+            // The paper offers a refusal and a defer alongside the plain yes/no.
+            label: 'Dilation',
             options: [
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
+              { value: 'yes', label: 'Dilated' },
+              { value: 'no', label: 'Not dilated' },
+              { value: 'refused', label: 'Patient refused' },
+              { value: 'deferred', label: 'Deferred today' },
             ],
-            width: 'half',
+            width: 'full',
           },
           {
             type: 'checkboxGroup',
             key: 'dilationAgents',
+            // Concentrations as pre-printed on the form.
             label: 'Dilation agents',
             options: [
+              { value: 'mydriacyl0.5', label: 'Mydriacyl 0.5%' },
+              { value: 'mydriacyl1', label: 'Mydriacyl 1%' },
+              { value: 'cyclopentolate1', label: 'Cyclopentolate 1%' },
+              { value: 'phenylephrine2.5', label: 'Neo-Synephrine 2.5%' },
               { value: 'tropicamide', label: 'Tropicamide' },
-              { value: 'phenylephrine', label: 'Phenylephrine' },
-              { value: 'cyclopentolate', label: 'Cyclopentolate' },
             ],
             width: 'half',
           },
           { type: 'text', key: 'dilationTime', label: 'Dilation time', width: 'third' },
+          {
+            type: 'checkbox',
+            key: 'dropsSideEffectsAdvised',
+            label: 'Patient advised the side effects of drops',
+            width: 'full',
+          },
+        ],
+      },
+      {
+        title: 'Internal / fundus',
+        fields: [
+          {
+            type: 'checkboxGroup',
+            key: 'posteriorMethod',
+            // "3 mirror 90 20 direct" on the paper.
+            label: 'Viewing method',
+            options: [
+              { value: '3mirror', label: '3-mirror' },
+              { value: '90d', label: '90D' },
+              { value: '20d', label: '20D' },
+              { value: 'direct', label: 'Direct' },
+            ],
+            width: 'full',
+          },
+          {
+            type: 'checkbox',
+            key: 'nrrHealthy',
+            label: 'NRR pink, healthy; margin distinct OU',
+            width: 'full',
+            normal: true,
+          },
           {
             type: 'select',
             key: 'cdRatioOd',
@@ -774,10 +891,29 @@ export const EXAM_TABS: ExamTab[] = [
             options: CD_RATIO,
             width: 'third',
           },
-          { type: 'slitLampRow', key: 'macula', label: 'Macula' },
-          { type: 'slitLampRow', key: 'vessels', label: 'Vessels' },
-          { type: 'slitLampRow', key: 'vitreous', label: 'Vitreous' },
-          { type: 'slitLampRow', key: 'periphery', label: 'Periphery' },
+          { type: 'eyeFindingRow', key: 'macula', label: 'Macula', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'vessels', label: 'Vessels', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'vitreous', label: 'Vitreous', normal: { od: { nl: true }, os: { nl: true } } },
+          { type: 'eyeFindingRow', key: 'periphery', label: 'Peripheral', normal: { od: { nl: true }, os: { nl: true } } },
+          {
+            type: 'checkbox',
+            key: 'peripheralIntact',
+            label: 'No hole / tear / break 360°',
+            width: 'half',
+            normal: true,
+          },
+          {
+            type: 'radio',
+            key: 'peripheralIntactScope',
+            label: 'Applies to',
+            options: [
+              { value: 'ou', label: 'OU' },
+              { value: 'od', label: 'OD' },
+              { value: 'os', label: 'OS' },
+            ],
+            width: 'half',
+            normal: 'ou',
+          },
         ],
       },
     ],
@@ -925,3 +1061,59 @@ export const DEFAULT_TEMPLATE_SECTIONS = EXAM_TABS.filter((t) => !t.stub).map((t
             ? ['cvaOdDistance', 'cvaOsDistance']
             : undefined,
 }));
+
+/**
+ * The value a field takes on a wholly normal exam, or `undefined` when the
+ * field has no meaningful default (free text, measurements, drawings).
+ *
+ * Most fields declare this inline as `normal`; the row types below are uniform
+ * enough to answer for themselves.
+ */
+function normalValueFor(field: ExamField): unknown {
+  if (field.normal !== undefined) return field.normal;
+  switch (field.type) {
+    case 'rosSystem':
+      return 'negative';
+    case 'slitLampRow':
+      return { wnl: true };
+    case 'eyeFindingRow':
+      return { od: { nl: true }, os: { nl: true } };
+    default:
+      return undefined;
+  }
+}
+
+/** True when a section has anything the "All normal" action could fill. */
+export function sectionHasNormals(section: ExamSection): boolean {
+  return section.fields.some((f) => normalValueFor(f) !== undefined);
+}
+
+/**
+ * Patch that marks a section normal. ROS notes are cleared alongside the status
+ * so a system flipped back to negative does not keep a stale positive comment.
+ */
+export function normalPatchForSection(section: ExamSection): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const field of section.fields) {
+    const value = normalValueFor(field);
+    if (value === undefined) continue;
+    patch[field.key] = value;
+    if (field.type === 'rosSystem') patch[`${field.key}Notes`] = '';
+  }
+  return patch;
+}
+
+/** Patch that marks every section of a tab normal. */
+export function normalPatchForTab(tab: ExamTab): Record<string, unknown> {
+  return tab.sections.reduce<Record<string, unknown>>(
+    (acc, section) => ({ ...acc, ...normalPatchForSection(section) }),
+    {},
+  );
+}
+
+/** Tabs the "Normal exam" action fills: every live tab that has defaults. */
+export function tabsWithNormals(): ExamTab[] {
+  return EXAM_TABS.filter(
+    (tab) => !tab.stub && !tab.legacy && tab.sections.some(sectionHasNormals),
+  );
+}

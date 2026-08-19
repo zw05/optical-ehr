@@ -82,6 +82,7 @@ model User {
   appointments     Appointment[]  @relation("Provider")
   tasksAssigned    Task[]         @relation("Assignee")
   documentLinks    EncounterDocument[]
+  historyReviews   PatientHistoryReview[]
 }
 
 // ---------- Patient chart ----------
@@ -128,6 +129,7 @@ model Patient {
   updatedAt  DateTime  @updatedAt
 
   histories     PatientHistory[]
+  intakeHistory PatientIntakeHistory?
   insurances    InsurancePolicy[]
   appointments  Appointment[]
   encounters    Encounter[]
@@ -163,6 +165,44 @@ model PatientHistory {
   createdAt DateTime    @default(now())
 
   @@index([patientId, kind])
+}
+
+/// The paper intake questionnaire: Social, Family, Review of Systems, and Past
+/// Medical History, plus surgical history, allergies, and medications. Captured
+/// once per patient and re-confirmed at each visit rather than re-asked.
+///
+/// `answers` is a JSON map of questionKey -> { status, detail } where status is
+/// "ce" (can't elaborate), "no", or "yes", and detail carries the paper form's
+/// follow-up column (how often / relationship to you / how long). Keeping it as
+/// JSON lets the question set change without a migration; the shape is
+/// validated in the service layer.
+model PatientIntakeHistory {
+  id              String    @id @default(uuid())
+  patientId       String    @unique
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  answers         Json      @default("{}")
+  patientSignedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  reviews PatientHistoryReview[]
+}
+
+/// One "Re-Reviewed Date / Dr.'s Signature" line from the paper form: a provider
+/// attesting that the intake history was reviewed at a visit, with or without
+/// changes. Rows are append-only so the review trail survives later edits.
+model PatientHistoryReview {
+  id           String               @id @default(uuid())
+  intakeId     String
+  intake       PatientIntakeHistory @relation(fields: [intakeId], references: [id])
+  encounterId  String?
+  reviewedById String
+  reviewedBy   User                 @relation(fields: [reviewedById], references: [id])
+  changesNoted Boolean              @default(false)
+  note         String?
+  reviewedAt   DateTime             @default(now())
+
+  @@index([intakeId, reviewedAt])
 }
 
 // ---------- Insurance (records only; no claims in v1) ----------
