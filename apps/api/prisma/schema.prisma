@@ -212,7 +212,7 @@ model AcceptedPayer {
   id                String   @id @default(uuid())
   practiceId        String
   practice          Practice @relation(fields: [practiceId], references: [id])
-  name              String // e.g. VSP, EyeMed, Medicare
+  name              String // e.g. EyeMed, Spectera, Fidelis Care
   notes             String?
   eligibilityNotes  String?
   phone             String?

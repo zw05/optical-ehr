@@ -1,13 +1,15 @@
 'use client';
 
-/** Single patient chart: demographics, insurance, exams, prescriptions, documents, print Rx PDF. */
+/** Single patient chart: demographics, insurance, exams, prescriptions, orders, documents, print PDFs. */
 import { useCallback, useEffect, useState, FormEvent, ReactNode } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BackButton from '@/components/BackButton';
 import { PatientDocumentsPanel } from '@/components/documents/PatientDocumentsPanel';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { api, getSessionUser } from '@/lib/api';
+import { printOrder, printRx } from '@/lib/printing';
 import { recordRecentPatient } from '@/lib/recentPatients';
 import { PATIENT_TAGS, patientTagLabel, type PatientTag } from '@/lib/patientTags';
 
@@ -74,6 +76,16 @@ interface PrescriptionRow {
   issuedAt: string | null;
   expiresAt: string | null;
   prescriber: { firstName: string; lastName: string };
+}
+
+interface OrderRow {
+  id: string;
+  kind: string;
+  status: string;
+  labName: string | null;
+  details: { trayNumber?: string } | null;
+  updatedAt: string;
+  prescription: { type: string; version: number };
 }
 
 const SEX_OPTIONS = ['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'] as const;
@@ -191,6 +203,7 @@ export default function PatientChartPage() {
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tagError, setTagError] = useState<string | null>(null);
   const [savingTags, setSavingTags] = useState(false);
@@ -213,6 +226,7 @@ export default function PatientChartPage() {
         alerts: detail.alerts,
       });
       setPrescriptions(await api<PrescriptionRow[]>(`/prescriptions/patient/${patientId}`));
+      setOrders(await api<OrderRow[]>(`/orders?patientId=${patientId}`));
       if (isClinical) {
         setEncounters(await api<EncounterRow[]>(`/encounters/patient/${patientId}`));
       }
@@ -671,7 +685,10 @@ export default function PatientChartPage() {
                     {rx.status === 'FINALIZED' && (
                       <a
                         href={`/api/reports/prescriptions/${rx.id}`}
-                        onClick={(e) => printRx(e, rx.id, prefs.printing.openInNewTab)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void printRx(rx.id, prefs.printing.openInNewTab);
+                        }}
                       >
                         Print
                       </a>
@@ -682,6 +699,67 @@ export default function PatientChartPage() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section className="card">
+        <h2>Optical orders</h2>
+        {orders.length === 0 ? (
+          <p className="muted">No orders.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Kind</th>
+                <th scope="col">Rx</th>
+                <th scope="col">Tray</th>
+                <th scope="col">Lab</th>
+                <th scope="col">Status</th>
+                <th scope="col">Updated</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr key={order.id}>
+                  <td>{order.kind === 'SPECTACLE' ? 'Spectacle' : 'Contact lens'}</td>
+                  <td>v{order.prescription.version}</td>
+                  <td>{order.details?.trayNumber || '—'}</td>
+                  <td>{order.labName ?? '—'}</td>
+                  <td>
+                    <span
+                      className={`badge ${
+                        order.status === 'DISPENSED'
+                          ? 'success'
+                          : order.status === 'REMAKE' || order.status === 'CANCELLED'
+                            ? 'danger'
+                            : ''
+                      }`}
+                    >
+                      {titleCase(order.status)}
+                    </span>
+                  </td>
+                  <td>{formatDate(order.updatedAt)}</td>
+                  <td>
+                    <a
+                      href={`/api/reports/orders/${order.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void printOrder(order.id, prefs.printing.openInNewTab);
+                      }}
+                    >
+                      Print
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Create and edit orders from the <Link href="/orders">Orders</Link> queue.
+        </p>
       </section>
 
       <section className="card">
@@ -870,16 +948,3 @@ function PatientInsurancePanel({
   );
 }
 
-async function printRx(event: React.MouseEvent, prescriptionId: string, openInNewTab: boolean) {
-  event.preventDefault();
-  const blob = await api<Blob>(`/reports/prescriptions/${prescriptionId}`, { method: 'POST' });
-  const url = URL.createObjectURL(blob);
-  if (openInNewTab) {
-    window.open(url, '_blank');
-  } else {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `prescription-${prescriptionId}.pdf`;
-    a.click();
-  }
-}

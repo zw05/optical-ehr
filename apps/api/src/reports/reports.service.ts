@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrescriptionStatus, PrescriptionType, Prisma } from '@prisma/client';
+import { OrderKind, OrderStatus, PrescriptionStatus, PrescriptionType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BlobStorageService } from '../documents/blob-storage.service';
@@ -290,6 +290,55 @@ export class ReportsService {
     return { report, pdf };
   }
 
+  /**
+   * Issues the printable job paper for an optical order. Unlike prescriptions
+   * there is no status gate: the paper is normally printed the moment the order
+   * is opened, while it is still DRAFT, and is reprinted throughout fulfillment.
+   * The underlying Rx was already required to be finalized at order creation.
+   */
+  async generateOrderReport(practiceId: string, orderId: string, user: JwtPayload) {
+    const order = await this.prisma.opticalOrder.findFirst({
+      where: { id: orderId, practiceId },
+      include: { patient: true, prescription: true, practice: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const rxKind = order.prescription.type === PrescriptionType.SPECTACLE ? 'spectacle-rx' : 'contact-lens-rx';
+    // Practices seeded before order printing existed have no order-summary
+    // template; the matching Rx template is always present and prints fine.
+    const template = (await this.resolveTemplate(practiceId, 'order-summary')) ?? (await this.resolveTemplate(practiceId, rxKind));
+    if (!template) throw new BadRequestException('No active report template for order-summary');
+
+    const layout = template.layout as unknown as ReportLayout;
+    const content = this.buildOrderContent(order);
+    const withAssets = await this.attachPrintAssets(layout, content);
+    const pdf = await this.renderer.render(layout, withAssets);
+
+    const stored = await this.blobs.upload('reports', `order-${order.patient.mrn}-${order.id}.pdf`, pdf);
+    const report = await this.prisma.generatedReport.create({
+      data: {
+        templateId: template.id,
+        // GeneratedReport has no order link; the Rx keeps the row traceable to
+        // a patient for re-download audit, and the blob path names the order.
+        prescriptionId: order.prescriptionId,
+        blobPath: stored.blobPath,
+        sha256: stored.sha256,
+        generatedById: user.sub,
+      },
+    });
+
+    await this.audit.log({
+      practiceId,
+      actorId: user.sub,
+      action: 'PRINT',
+      entityType: 'GeneratedReport',
+      entityId: report.id,
+      patientId: order.patientId,
+    });
+
+    return { report, pdf };
+  }
+
   /** Re-downloads a previously issued PDF and logs the access (READ audit event). */
   async getReportContent(practiceId: string, id: string, user: JwtPayload) {
     const report = await this.prisma.generatedReport.findFirst({
@@ -442,6 +491,241 @@ export class ReportsService {
       remarks: v.remarks,
     };
   }
+
+  /**
+   * Maps an optical order into renderer-ready content: the powers being ordered
+   * (taken from the linked Rx) plus the job specification the lab works from.
+   */
+  private buildOrderContent(order: {
+    id: string;
+    kind: OrderKind;
+    status: OrderStatus;
+    details: unknown;
+    labName: string | null;
+    labReference: string | null;
+    priceTotal: Prisma.Decimal | null;
+    deposit: Prisma.Decimal | null;
+    balanceDue: Prisma.Decimal | null;
+    warrantyNotes: string | null;
+    createdAt: Date;
+    patient: { firstName: string; lastName: string; mrn: string; dateOfBirth: Date | null };
+    prescription: { type: PrescriptionType; values: unknown; version: number };
+    practice: { name: string; phone: string | null; address: string | null; logoUrl?: string | null };
+  }): ReportContent {
+    const d = (order.details ?? {}) as OrderDetails;
+    const spectacle = order.kind === OrderKind.SPECTACLE;
+
+    const jobRows = [
+      // Always printed, even when unset: an unassigned tray gets written on by
+      // hand at the bench, so the paper needs a rule to write on.
+      { label: 'Tray #', value: d.trayNumber?.trim() || '______________________' },
+      ...rowsFrom([
+        ['Job notes', d.jobNotes],
+        ['Order date', order.createdAt.toISOString().slice(0, 10)],
+        ['Status', order.status],
+      ]),
+    ];
+
+    const detailSections = spectacle
+      ? [
+          { heading: 'Frame', rows: rowsFrom([
+            ['Brand', d.frame?.brand],
+            ['Model', d.frame?.model],
+            ['Color', d.frame?.color],
+            ['SKU', d.frame?.sku],
+            ['Eye', d.frame?.eye],
+            ['Bridge', d.frame?.bridge],
+            ['Temple', d.frame?.temple],
+            ['Source', d.frame?.source],
+          ]) },
+          { heading: 'Lens', rows: rowsFrom([
+            ['Design', d.lens?.design],
+            ['Material', d.lens?.material],
+            ['Coatings', d.lens?.coatings?.length ? d.lens.coatings.join(', ') : undefined],
+          ]) },
+          { heading: 'Measurements', rows: rowsFrom([
+            ['PD OD', mm(d.measurements?.pdOd)],
+            ['PD OS', mm(d.measurements?.pdOs)],
+            ['Seg height OD', mm(d.measurements?.segHeightOd)],
+            ['Seg height OS', mm(d.measurements?.segHeightOs)],
+            ['Optical center', mm(d.measurements?.oc)],
+            ['Vertex', mm(d.measurements?.vertex)],
+            ['Pantoscopic tilt', deg(d.measurements?.pantoTilt)],
+            ['Wrap', deg(d.measurements?.wrap)],
+          ]) },
+        ]
+      : [
+          { heading: 'Contact lens', rows: rowsFrom([
+            ['Brand', d.brand],
+            ['OD quantity', d.odQty],
+            ['OS quantity', d.osQty],
+            ['Supply', d.supplyMonths !== undefined ? `${d.supplyMonths} months` : undefined],
+            ['Trial', d.trial === undefined ? undefined : d.trial ? 'Yes' : 'No'],
+          ]) },
+        ];
+
+    const labRows = rowsFrom([
+      ['Lab', order.labName],
+      ['Lab reference', order.labReference],
+    ]);
+    const owedRows = rowsFrom([
+      ['Patient owes', money(order.priceTotal)],
+      ['Amount paid', money(order.deposit)],
+      ['Balance due', money(order.balanceDue)],
+    ]);
+
+    return {
+      title: `${spectacle ? 'Spectacle' : 'Contact Lens'} Order`,
+      practice: {
+        name: order.practice.name,
+        phone: order.practice.phone,
+        address: order.practice.address,
+        logoUrl: order.practice.logoUrl ?? null,
+      },
+      patient: {
+        name: `${order.patient.lastName}, ${order.patient.firstName}`,
+        mrn: order.patient.mrn,
+        dateOfBirth: order.patient.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+      },
+      eyeTable:
+        order.prescription.type === PrescriptionType.SPECTACLE
+          ? spectacleEyeTable(
+              (order.prescription.values as { od: SpectacleEye; os: SpectacleEye }).od,
+              (order.prescription.values as { od: SpectacleEye; os: SpectacleEye }).os,
+            )
+          : contactLensEyeTable(
+              (order.prescription.values as { od: ContactLensEye; os: ContactLensEye }).od,
+              (order.prescription.values as { od: ContactLensEye; os: ContactLensEye }).os,
+            ),
+      sections: [
+        { heading: 'Job / tray', rows: jobRows },
+        ...detailSections.filter((s) => s.rows.length > 0),
+        ...(labRows.length > 0 ? [{ heading: 'Lab', rows: labRows }] : []),
+        ...pricingSections(d),
+        ...(owedRows.length > 0 ? [{ heading: 'Balance', rows: owedRows }] : []),
+      ],
+      remarks: order.warrantyNotes ?? undefined,
+    };
+  }
+}
+
+interface OrderDetails {
+  frame?: {
+    brand?: string;
+    model?: string;
+    color?: string;
+    sku?: string;
+    eye?: string;
+    bridge?: string;
+    temple?: string;
+    source?: string;
+  };
+  lens?: { design?: string; material?: string; coatings?: string[] };
+  measurements?: {
+    pdOd?: number;
+    pdOs?: number;
+    segHeightOd?: number;
+    segHeightOs?: number;
+    oc?: number;
+    vertex?: number;
+    pantoTilt?: number;
+    wrap?: number;
+  };
+  odQty?: number;
+  osQty?: number;
+  brand?: string;
+  supplyMonths?: number;
+  trial?: boolean;
+  trayNumber?: string;
+  jobNotes?: string;
+  pricing?: {
+    frameRetail?: number;
+    lensRetail?: number;
+    addOnsRetail?: number;
+    clMaterialsRetail?: number;
+    clFittingRetail?: number;
+    examCharge?: number;
+    subtotal: number;
+    discountPercent?: number;
+    coverage?: {
+      payerName: string;
+      planName?: string;
+      memberId?: string;
+      frameAllowance?: number;
+      framePercentOff?: number;
+      lensAllowance?: number;
+      lensCopay?: number;
+      materialsAllowance?: number;
+    };
+    planPortion: number;
+    patientTotal: number;
+  };
+}
+
+function amount(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : value.toFixed(2);
+}
+
+/**
+ * The retail lines, the benefits, then what is owed — as separate sections
+ * because the renderer lays each section out as one column per row, so a single
+ * long section would squeeze every label into a sliver. Benefit terms come from
+ * the order's own snapshot, so a reprint shows what was quoted on the day.
+ */
+function pricingSections(details: OrderDetails): ReportContent['sections'] {
+  const p = details.pricing;
+  if (!p) return [];
+  const coverage = p.coverage;
+
+  const retail = rowsFrom([
+    ['Frame', amount(p.frameRetail)],
+    ['Lenses', amount(p.lensRetail)],
+    ['Add-ons', amount(p.addOnsRetail)],
+    ['Materials', amount(p.clMaterialsRetail)],
+    ['Fitting fee', amount(p.clFittingRetail)],
+    [p.coverage ? 'Exam copay' : 'Exam fee', amount(p.examCharge)],
+    ['Subtotal', amount(p.subtotal)],
+    ...(p.discountPercent
+      ? ([[`Discount (${p.discountPercent}%)`, amount(p.subtotal - p.patientTotal)]] as [string, unknown][])
+      : []),
+  ]);
+
+  const benefits = coverage
+    ? rowsFrom([
+        ['Plan', [coverage.payerName, coverage.planName].filter(Boolean).join(' — ')],
+        ['Member ID', coverage.memberId],
+        ['Frame allow.', amount(coverage.frameAllowance)],
+        ['Overage off', coverage.framePercentOff ? `${coverage.framePercentOff}%` : undefined],
+        ['Lens allow.', amount(coverage.lensAllowance)],
+        ['Lens copay', amount(coverage.lensCopay)],
+        ['Materials allow.', amount(coverage.materialsAllowance)],
+        ['Plan pays', amount(p.planPortion)],
+      ])
+    : [];
+
+  return [
+    ...(retail.length > 0 ? [{ heading: 'Pricing', rows: retail }] : []),
+    ...(benefits.length > 0 ? [{ heading: 'Insurance', rows: benefits }] : []),
+  ];
+}
+
+/** Drops entries with no value so the paper never prints an empty field. */
+function rowsFrom(entries: [string, unknown][]): { label: string; value: string }[] {
+  return entries
+    .filter(([, value]) => value !== undefined && value !== null && `${value}`.trim() !== '')
+    .map(([label, value]) => ({ label, value: `${value}`.trim() }));
+}
+
+function mm(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : `${value} mm`;
+}
+
+function deg(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : `${value}°`;
+}
+
+function money(value: Prisma.Decimal | null): string | undefined {
+  return value === null ? undefined : value.toFixed(2);
 }
 
 /** Formats a diopter value with explicit sign and two decimals, e.g. "-1.25", "+2.00". */
