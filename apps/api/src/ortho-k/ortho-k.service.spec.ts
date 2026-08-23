@@ -291,6 +291,46 @@ describe('OrthoKService.update', () => {
     expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBe(OrthoKStatus.ACTIVE);
   });
 
+  it('starts the sequence even when the edit resubmits FITTING unchanged', async () => {
+    // The detail page's edit form posts every field, including the current status.
+    const { service, prisma } = makeService();
+    prisma.orthoKEnrollment.findFirst.mockResolvedValue({
+      id: 'enr-1',
+      startDate: null,
+      status: OrthoKStatus.FITTING,
+    });
+    await service.update(PRACTICE, 'enr-1', {
+      startDate: START.toISOString(),
+      status: OrthoKStatus.FITTING,
+    });
+    expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBe(OrthoKStatus.ACTIVE);
+  });
+
+  it('honours an explicit status that is not FITTING when a start date is set', async () => {
+    const { service, prisma } = makeService();
+    prisma.orthoKEnrollment.findFirst.mockResolvedValue({
+      id: 'enr-1',
+      startDate: null,
+      status: OrthoKStatus.FITTING,
+    });
+    await service.update(PRACTICE, 'enr-1', {
+      startDate: START.toISOString(),
+      status: OrthoKStatus.ON_HOLD,
+    });
+    expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBe(OrthoKStatus.ON_HOLD);
+  });
+
+  it('leaves the status alone when no start date is involved', async () => {
+    const { service, prisma } = makeService();
+    prisma.orthoKEnrollment.findFirst.mockResolvedValue({
+      id: 'enr-1',
+      startDate: START,
+      status: OrthoKStatus.ACTIVE,
+    });
+    await service.update(PRACTICE, 'enr-1', { folderRef: 'Drawer D / 02' });
+    expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBeUndefined();
+  });
+
   it('clears the recall queue when an enrollment is discontinued', async () => {
     const { service, prisma } = makeService();
     prisma.orthoKEnrollment.findFirst.mockResolvedValue({

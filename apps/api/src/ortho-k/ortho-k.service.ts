@@ -191,9 +191,12 @@ export class OrthoKService {
     const startDate = dto.startDate !== undefined ? parseDateOnly(dto.startDate) : undefined;
 
     // Recording the first night of wear is what moves a fitting into the sequence.
+    // The check is made against the status the edit would leave in place, not just
+    // an explicitly chosen one: an edit form that resubmits the current status
+    // unchanged must not strand a started enrollment on FITTING.
+    const requested = dto.status ?? existing.status;
     const status =
-      dto.status ??
-      (startDate && existing.status === OrthoKStatus.FITTING ? OrthoKStatus.ACTIVE : undefined);
+      startDate && requested === OrthoKStatus.FITTING ? OrthoKStatus.ACTIVE : dto.status;
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.orthoKEnrollment.update({
