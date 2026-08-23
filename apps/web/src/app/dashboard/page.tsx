@@ -16,6 +16,7 @@ import {
   DASHBOARD_PANEL_KEYS,
   type DashboardPanelKey,
 } from '@/lib/dashboardPanels';
+import { describeDue, type OrthoKNotifications } from '@/lib/orthoK';
 
 interface Appointment {
   id: string;
@@ -84,6 +85,7 @@ export default function DashboardPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [recalls, setRecalls] = useState<Recall[]>([]);
+  const [orthoK, setOrthoK] = useState<OrthoKNotifications | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [history, setHistory] = useState<Appointment[]>([]);
@@ -136,6 +138,9 @@ export default function DashboardPage() {
     api<Order[]>('/orders?status=RECEIVED')
       .then(setOrders)
       .catch(() => setOrders([]));
+    api<OrthoKNotifications>('/ortho-k/notifications')
+      .then(setOrthoK)
+      .catch(() => setOrthoK(null));
 
     api<Appointment[]>(
       `/appointments?from=${monthAgo.toISOString()}&to=${today.toISOString()}&status=COMPLETED`,
@@ -346,6 +351,37 @@ export default function DashboardPage() {
                     </td>
                     <td>{r.reason}</td>
                     <td className="muted">{r.patient.phone ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+    ),
+    orthoK: (
+      <section className="panel" key="orthoK">
+        <div className="panel-header">
+          Ortho-K follow-ups ({orthoK ? orthoK.overdueCount + orthoK.dueCount : 0})
+        </div>
+        <div className="panel-body">
+          {!orthoK || orthoK.rows.length === 0 ? (
+            <p className="muted">No Ortho-K follow-ups due.</p>
+          ) : (
+            <table>
+              <tbody>
+                {orthoK.rows.slice(0, 10).map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link href={`/ortho-k/${row.id}`}>
+                        {row.patient.lastName}, {row.patient.firstName}
+                      </Link>
+                    </td>
+                    <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
+                      {describeDue(row.next)}
+                    </td>
+                    <td className="muted">{row.patient.phone ?? '—'}</td>
+                    <td className="muted">{row.folderRef ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

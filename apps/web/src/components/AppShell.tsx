@@ -292,6 +292,7 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
   const [railTip, setRailTip] = useState<{ label: string; top: number; left: number } | null>(null);
   const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null);
   const [practiceName, setPracticeName] = useState('Optical EHR');
+  const [orthoKOverdue, setOrthoKOverdue] = useState(0);
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -328,6 +329,20 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, []);
+
+  // Overdue Ortho-K checks are counted once per shell mount: the badge is a
+  // prompt to open the board, not a live ticker.
+  useEffect(() => {
+    let cancelled = false;
+    api<{ overdueCount: number }>('/ortho-k/notifications')
+      .then((n) => {
+        if (!cancelled) setOrthoKOverdue(n.overdueCount);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -480,6 +495,14 @@ function ShellChrome({ children, user }: { children: ReactNode; user: SessionUse
             >
               <NavIconSvg name={item.icon} />
               <span>{item.label}</span>
+              {item.icon === 'orthoK' && orthoKOverdue > 0 && (
+                <span
+                  className="nav-badge"
+                  aria-label={`${orthoKOverdue} overdue follow-up${orthoKOverdue === 1 ? '' : 's'}`}
+                >
+                  {orthoKOverdue}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

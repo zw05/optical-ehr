@@ -644,10 +644,10 @@ body[data-sidebar-resizing] .topbar {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   }
 
-  html[data-sidebar='rail'] .topbar-item > span,
+  html[data-sidebar='rail'] .topbar-item > span:not(.nav-badge),
   html[data-sidebar='rail'] .topbar-brand-text,
   html[data-sidebar='rail'] .topbar-user-meta,
-  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-item > span,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-item > span:not(.nav-badge),
   html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-brand-text,
   html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-user-meta {
     display: none;
@@ -3540,5 +3540,36 @@ html[data-reduced-motion='on'] *::after {
   .ok-log-form,
   .ok-log-form label {
     width: 100%;
+  }
+}
+
+/* Overdue count on a nav item. Sits at the right edge when the sidebar is
+   expanded and tucks against the icon once it collapses to a rail. */
+.nav-badge {
+  margin-left: auto;
+  min-width: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (min-width: 701px) {
+  html[data-sidebar='rail'] .topbar-item,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .topbar-item {
+    position: relative;
+  }
+
+  html[data-sidebar='rail'] .nav-badge,
+  html[data-sidebar='auto'] .topbar:not(:hover):not(:focus-within) .nav-badge {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.3rem;
+    margin-left: 0;
   }
 }
