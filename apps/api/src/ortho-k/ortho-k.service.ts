@@ -14,6 +14,7 @@ import {
   MILESTONE_LABELS,
   milestoneStates,
   nextMilestone,
+  parseDateOnly,
   type MilestoneState,
   type MilestoneStatus,
 } from './milestones';
@@ -98,7 +99,7 @@ export class OrthoKService {
       throw new BadRequestException('Patient already has an active Ortho-K enrollment');
     }
 
-    const startDate = dto.startDate ? new Date(dto.startDate) : null;
+    const startDate = dto.startDate ? parseDateOnly(dto.startDate) : null;
 
     return this.prisma.$transaction(async (tx) => {
       const enrollment = await tx.orthoKEnrollment.create({
@@ -187,7 +188,7 @@ export class OrthoKService {
     });
     if (!existing) throw new NotFoundException('Ortho-K enrollment not found');
 
-    const startDate = dto.startDate !== undefined ? new Date(dto.startDate) : undefined;
+    const startDate = dto.startDate !== undefined ? parseDateOnly(dto.startDate) : undefined;
 
     // Recording the first night of wear is what moves a fitting into the sequence.
     const status =
@@ -250,7 +251,7 @@ export class OrthoKService {
         data: {
           enrollmentId: id,
           milestone: dto.milestone,
-          visitDate: new Date(dto.visitDate),
+          visitDate: parseDateOnly(dto.visitDate),
           note: dto.note,
           recordedById: actorId,
         },
@@ -258,7 +259,7 @@ export class OrthoKService {
 
       const visits = [
         ...enrollment.visits,
-        { milestone: dto.milestone, visitDate: new Date(dto.visitDate) },
+        { milestone: dto.milestone, visitDate: parseDateOnly(dto.visitDate) },
       ];
 
       // Finishing the six-month check ends the fitting sequence.

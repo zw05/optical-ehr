@@ -2,8 +2,22 @@
  * Development seed: one practice, one user per role, default exam and report
  * templates, appointment types, and a demo patient. Synthetic data only.
  */
-import { PrismaClient, Role } from '@prisma/client';
+import {
+  OrthoKMilestone,
+  OrthoKStatus,
+  PatientTag,
+  Practice,
+  PrismaClient,
+  Role,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import {
+  addDays,
+  MILESTONE_LABELS,
+  MILESTONE_SCHEDULE,
+  milestoneStates,
+  type ScheduledMilestone,
+} from '../src/ortho-k/milestones';
 
 const prisma = new PrismaClient();
 
@@ -155,7 +169,186 @@ async function main() {
     });
   }
 
+  await seedOrthoK(practice);
+
   console.log('Seed complete. Dev logins use password: test12340');
+}
+
+/**
+ * Ortho-K program patients, chosen to put every board state on screen at once:
+ * a fitting that has not started, a patient on schedule, one who has slipped
+ * past a check, and one through the sequence and onto annual review.
+ *
+ * Start dates are relative to the seed run, so the board looks the same however
+ * long after the seed it is opened. Recalls are derived with the same helper the
+ * service uses, so seeded data and live data agree.
+ */
+async function seedOrthoK(practice: Practice) {
+  const enrollments: {
+    mrn: string;
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+    phone: string;
+    startedDaysAgo: number | null;
+    logged: ScheduledMilestone[];
+    interimDaysIn?: number;
+    status: OrthoKStatus;
+    lensBrand: string;
+    lensDesign: string;
+    lensParams: string;
+    folderRef: string;
+    notes?: string;
+  }[] = [
+    {
+      // Lenses on order: no start date, so nothing is scheduled yet.
+      mrn: 'P000201',
+      firstName: 'Mina',
+      lastName: 'Okafor',
+      dateOfBirth: '2013-09-22',
+      phone: '(555) 010-2201',
+      startedDaysAgo: null,
+      logged: [],
+      status: OrthoKStatus.FITTING,
+      lensBrand: 'Paragon',
+      lensDesign: 'CRT Dual Axis',
+      lensParams: 'OD 8.6 / -2.75 / 33.0   OS 8.7 / -2.50 / 33.0',
+      folderRef: 'Drawer B / 14',
+      notes: 'Lenses ordered; dispense visit booked.',
+    },
+    {
+      // On schedule six weeks in, with an unscheduled check in between.
+      mrn: 'P000202',
+      firstName: 'Ellis',
+      lastName: 'Navarro',
+      dateOfBirth: '2011-02-14',
+      phone: '(555) 010-2202',
+      startedDaysAgo: 42,
+      logged: [
+        OrthoKMilestone.DAY_1,
+        OrthoKMilestone.DAY_2,
+        OrthoKMilestone.WEEK_1,
+        OrthoKMilestone.MONTH_1,
+      ],
+      interimDaysIn: 12,
+      status: OrthoKStatus.ACTIVE,
+      lensBrand: 'Euclid',
+      lensDesign: 'Emerald',
+      lensParams: 'OD 8.8 / -3.25 / 10.6   OS 8.8 / -3.00 / 10.6',
+      folderRef: 'Drawer B / 21',
+      notes: 'Interim visit at two weeks for lens handling.',
+    },
+    {
+      // Missed the one-week check: the board should show this one in red.
+      mrn: 'P000203',
+      firstName: 'Rosa',
+      lastName: 'Delgado',
+      dateOfBirth: '2014-11-30',
+      phone: '(555) 010-2203',
+      startedDaysAgo: 24,
+      logged: [OrthoKMilestone.DAY_1, OrthoKMilestone.DAY_2],
+      status: OrthoKStatus.ACTIVE,
+      lensBrand: 'Paragon',
+      lensDesign: 'CRT',
+      lensParams: 'OD 8.9 / -1.75 / 33.0   OS 8.9 / -1.75 / 33.0',
+      folderRef: 'Drawer C / 03',
+      notes: 'Parent rescheduled twice; phone is the best contact.',
+    },
+    {
+      // Through the sequence and onto annual review.
+      mrn: 'P000204',
+      firstName: 'Jonah',
+      lastName: 'Whitfield',
+      dateOfBirth: '2009-07-08',
+      phone: '(555) 010-2204',
+      startedDaysAgo: 230,
+      logged: [
+        OrthoKMilestone.DAY_1,
+        OrthoKMilestone.DAY_2,
+        OrthoKMilestone.WEEK_1,
+        OrthoKMilestone.MONTH_1,
+        OrthoKMilestone.MONTH_3,
+        OrthoKMilestone.MONTH_6,
+      ],
+      status: OrthoKStatus.MAINTENANCE,
+      lensBrand: 'Euclid',
+      lensDesign: 'Emerald',
+      lensParams: 'OD 8.7 / -4.00 / 10.6   OS 8.6 / -4.25 / 10.6',
+      folderRef: 'Drawer A / 07',
+    },
+  ];
+
+  const today = new Date();
+
+  for (const row of enrollments) {
+    const existing = await prisma.patient.findFirst({
+      where: { practiceId: practice.id, mrn: row.mrn },
+      select: { id: true },
+    });
+    if (existing) continue; // re-seeding must not duplicate the program board
+
+    const patient = await prisma.patient.create({
+      data: {
+        practiceId: practice.id,
+        mrn: row.mrn,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        dateOfBirth: new Date(row.dateOfBirth),
+        phone: row.phone,
+        preferredContact: 'phone',
+        tags: [PatientTag.ORTHO_K],
+      },
+    });
+
+    const startDate = row.startedDaysAgo === null ? null : addDays(today, -row.startedDaysAgo);
+
+    const visits = startDate
+      ? [
+          ...row.logged.map((milestone) => ({
+            milestone,
+            // Seen on the day the check fell due.
+            visitDate: addDays(startDate, MILESTONE_SCHEDULE[milestone].offsetDays),
+          })),
+          ...(row.interimDaysIn !== undefined
+            ? [
+                {
+                  milestone: OrthoKMilestone.INTERIM,
+                  visitDate: addDays(startDate, row.interimDaysIn),
+                },
+              ]
+            : []),
+        ]
+      : [];
+
+    await prisma.orthoKEnrollment.create({
+      data: {
+        practiceId: practice.id,
+        patientId: patient.id,
+        status: row.status,
+        startDate,
+        eyes: 'OU',
+        lensBrand: row.lensBrand,
+        lensDesign: row.lensDesign,
+        lensParams: row.lensParams,
+        folderRef: row.folderRef,
+        notes: row.notes,
+        visits: { create: visits },
+      },
+    });
+
+    // Same derivation the service uses, so the recall queue matches the board.
+    const outstanding = milestoneStates(startDate, visits).filter((m) => m.state !== 'DONE');
+    if (outstanding.length > 0) {
+      await prisma.recall.createMany({
+        data: outstanding.map((m) => ({
+          practiceId: practice.id,
+          patientId: patient.id,
+          reason: `Ortho-K — ${MILESTONE_LABELS[m.milestone]} follow-up`,
+          dueDate: m.dueDate,
+        })),
+      });
+    }
+  }
 }
 
 main()

@@ -7,6 +7,7 @@ import {
   milestoneStates,
   nextMilestone,
   ORTHO_K_SEQUENCE,
+  parseDateOnly,
   startOfDay,
   type MilestoneState,
   type VisitLike,
@@ -189,6 +190,31 @@ describe('isSequenceComplete', () => {
   it('is true once all six are logged, ignoring interim visits', () => {
     expect(isSequenceComplete(NUMBERED_VISITS)).toBe(true);
     expect(isSequenceComplete([visit(OrthoKMilestone.INTERIM, 4)])).toBe(false);
+  });
+});
+
+describe('parseDateOnly', () => {
+  it('reads a date-only string as the day the staff typed', () => {
+    // `new Date('2026-08-23')` is UTC midnight, which west of Greenwich falls on
+    // the 22nd locally and shifts the whole follow-up sequence a day early.
+    expect(parseDateOnly('2026-08-23')).toEqual(new Date(2026, 7, 23));
+    expect(parseDateOnly(' 2026-01-01 ')).toEqual(new Date(2026, 0, 1));
+  });
+
+  it('leaves a full timestamp to the standard parser', () => {
+    const iso = '2026-08-23T14:30:00.000Z';
+    expect(parseDateOnly(iso)).toEqual(new Date(iso));
+  });
+
+  it('keeps a date-entered start date on schedule', () => {
+    const start = parseDateOnly('2026-08-23');
+    expect(milestoneDueDate(start, OrthoKMilestone.DAY_1)).toEqual(new Date(2026, 7, 24));
+    // The day-1 check is not yet due on the evening the patient starts wearing.
+    expect(
+      milestoneStates(start, [], new Date(2026, 7, 23)).find(
+        (s) => s.milestone === OrthoKMilestone.DAY_1,
+      )?.state,
+    ).toBe('UPCOMING');
   });
 });
 

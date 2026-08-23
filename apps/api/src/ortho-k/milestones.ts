@@ -112,6 +112,20 @@ export function addDays(date: Date, days: number): Date {
   return copy;
 }
 
+/**
+ * Reads a date the staff typed, as the day they meant.
+ *
+ * `new Date('2026-08-23')` is parsed as UTC midnight, which west of Greenwich is
+ * the previous calendar day locally — enough to shift a whole follow-up sequence
+ * a day early. Date-only strings are therefore built in local time; anything
+ * carrying a time zone (a full ISO timestamp) is left to the standard parser.
+ */
+export function parseDateOnly(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return new Date(value);
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
 /** Whole calendar days from `from` to `to`; negative when `to` is earlier. */
 export function daysBetween(from: Date, to: Date): number {
   const ms = startOfDay(to).getTime() - startOfDay(from).getTime();
