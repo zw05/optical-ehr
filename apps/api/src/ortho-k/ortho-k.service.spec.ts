@@ -327,7 +327,7 @@ describe('OrthoKService.update', () => {
       startDate: START,
       status: OrthoKStatus.ACTIVE,
     });
-    await service.update(PRACTICE, 'enr-1', { folderRef: 'Drawer D / 02' });
+    await service.update(PRACTICE, 'enr-1', { notes: 'Parent prefers morning visits' });
     expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBeUndefined();
   });
 

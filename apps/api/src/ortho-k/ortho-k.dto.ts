@@ -29,11 +29,6 @@ export class EnrollOrthoKDto {
   @IsString()
   lensParams?: string;
 
-  /** Drawer, section, or folder number of the paper chart. */
-  @IsOptional()
-  @IsString()
-  folderRef?: string;
-
   @IsOptional()
   @IsString()
   notes?: string;
@@ -63,10 +58,6 @@ export class UpdateOrthoKDto {
   @IsOptional()
   @IsString()
   lensParams?: string;
-
-  @IsOptional()
-  @IsString()
-  folderRef?: string;
 
   @IsOptional()
   @IsString()

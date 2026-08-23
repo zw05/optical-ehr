@@ -101,7 +101,6 @@ export interface OrthoKEnrollment {
   lensBrand: string | null;
   lensDesign: string | null;
   lensParams: string | null;
-  folderRef: string | null;
   notes: string | null;
   patient: {
     id: string;

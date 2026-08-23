@@ -113,7 +113,6 @@ export class OrthoKService {
           lensBrand: dto.lensBrand,
           lensDesign: dto.lensDesign,
           lensParams: dto.lensParams,
-          folderRef: dto.folderRef,
           notes: dto.notes,
         },
         include: ENROLLMENT_INCLUDE,
@@ -177,7 +176,7 @@ export class OrthoKService {
   }
 
   /**
-   * Edits the lens details, folder reference, notes, status, or start date.
+   * Edits the lens details, notes, status, or start date.
    * Changing the start date re-dates the whole sequence, so the queued recalls
    * are rebuilt to match.
    */
@@ -208,7 +207,6 @@ export class OrthoKService {
           ...(dto.lensBrand !== undefined ? { lensBrand: dto.lensBrand } : {}),
           ...(dto.lensDesign !== undefined ? { lensDesign: dto.lensDesign } : {}),
           ...(dto.lensParams !== undefined ? { lensParams: dto.lensParams } : {}),
-          ...(dto.folderRef !== undefined ? { folderRef: dto.folderRef } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         },
         include: ENROLLMENT_INCLUDE,

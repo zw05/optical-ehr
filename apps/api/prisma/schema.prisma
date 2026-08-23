@@ -886,10 +886,6 @@ model OrthoKEnrollment {
   /// because the fitting set differs by lens design.
   lensParams String?
 
-  /// Where the paper folder lives: drawer, section, or folder number. The program
-  /// runs off physical charts, so finding the folder is a first-class field.
-  folderRef String?
-
   notes       String?
   startedById String?
   startedBy   User?    @relation("OrthoKStartedBy", fields: [startedById], references: [id])

@@ -4,8 +4,8 @@
  * One Ortho-K enrollment: the follow-up sequence in full, the visit log, and the
  * form staff use to record a check that has happened.
  *
- * Exam findings live in the paper folder — this page tracks dates and where that
- * folder is, not what was found.
+ * Exam findings live in the paper folder — this page tracks when each follow-up
+ * happened, not what was found.
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
@@ -49,7 +49,6 @@ export default function OrthoKDetailPage() {
     lensBrand: '',
     lensDesign: '',
     lensParams: '',
-    folderRef: '',
     notes: '',
   });
 
@@ -66,7 +65,6 @@ export default function OrthoKDetailPage() {
         lensBrand: row.lensBrand ?? '',
         lensDesign: row.lensDesign ?? '',
         lensParams: row.lensParams ?? '',
-        folderRef: row.folderRef ?? '',
         notes: row.notes ?? '',
       });
     } catch (err) {
@@ -119,7 +117,6 @@ export default function OrthoKDetailPage() {
           lensBrand: form.lensBrand,
           lensDesign: form.lensDesign,
           lensParams: form.lensParams,
-          folderRef: form.folderRef,
           notes: form.notes,
         },
       });
@@ -162,7 +159,6 @@ export default function OrthoKDetailPage() {
       <p className="muted">
         <Link href={`/patients/${patient.id}`}>Open patient chart</Link> · {patient.mrn}
         {patient.phone ? ` · ${patient.phone}` : ''}
-        {enrollment.folderRef ? ` · Folder ${enrollment.folderRef}` : ''}
       </p>
 
       {error && <p className="error-text">{error}</p>}
@@ -284,13 +280,6 @@ export default function OrthoKDetailPage() {
                   onChange={(e) => setForm((f) => ({ ...f, lensDesign: e.target.value }))}
                 />
               </label>
-              <label>
-                Paper folder
-                <input
-                  value={form.folderRef}
-                  onChange={(e) => setForm((f) => ({ ...f, folderRef: e.target.value }))}
-                />
-              </label>
               <label className="ok-enroll-wide">
                 Lens parameters
                 <input
@@ -330,12 +319,6 @@ export default function OrthoKDetailPage() {
               <dt>Parameters</dt>
               <dd className={enrollment.lensParams ? undefined : 'empty'}>
                 {enrollment.lensParams ?? '—'}
-              </dd>
-            </div>
-            <div className="detail-row">
-              <dt>Paper folder</dt>
-              <dd className={enrollment.folderRef ? undefined : 'empty'}>
-                {enrollment.folderRef ?? '—'}
               </dd>
             </div>
             <div className="detail-row">

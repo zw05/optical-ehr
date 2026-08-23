@@ -72,10 +72,6 @@ model OrthoKEnrollment {
   /// Free-text parameters copied off the paper folder (BC/OZ/power per eye).
   lensParams  String?
 
-  /// Where the paper folder lives: drawer/section/number. The whole program runs
-  /// off physical charts, so finding the folder is a first-class field.
-  folderRef   String?
-
   notes       String?
   startedById String?
   createdAt   DateTime     @default(now())
@@ -149,7 +145,7 @@ New module registered in `app.module.ts` alongside `RecallsModule`.
 | `enroll(practiceId, dto)` | Creates the enrollment, adds `ORTHO_K` to `Patient.tags` if absent, and seeds recalls for the sequence. Rejects a second non-terminal enrollment for the same patient. |
 | `board(practiceId, filters)` | The dashboard query: every non-discontinued enrollment with its patient, visits, and derived next-milestone/state. Filters: `status`, `state` (`overdue`/`due`/`upcoming`), free-text patient search. |
 | `get(practiceId, id)` | One enrollment with its full visit history, newest first. |
-| `update(practiceId, id, dto)` | Edits lens params, folder ref, eyes, notes, status. Setting `startDate` for the first time (re)seeds the recall sequence. |
+| `update(practiceId, id, dto)` | Edits lens params, eyes, notes, status. Setting `startDate` for the first time (re)seeds the recall sequence. |
 | `logVisit(practiceId, id, dto)` | Records a visit date + milestone + note; closes the matching `Recall`, schedules the next one, and advances `status` when `MONTH_6` lands. |
 | `deleteVisit(practiceId, id, visitId)` | Mistyped-date correction. Re-opens the milestone's recall. |
 | `notifications(practiceId)` | Counts + top rows for `OVERDUE` and `DUE` milestones — feeds the nav badge and the dashboard panel. |
@@ -190,37 +186,43 @@ Page layout:
 
 1. **Needs attention** (top, rendered only when non-empty) — red/amber cards for
    `OVERDUE` then `DUE` milestones: patient name, milestone, days late, phone,
-   folder ref, and a one-click **Log visit** / **Snooze** action.
+   and a one-click **Log visit** action.
 2. **Filter bar** — status (`Active` / `Fitting` / `Maintenance` / `On hold` /
    `Discontinued` / all), state (`Overdue` / `Due` / `Upcoming`), and a patient
    search box.
 3. **Program board** — one row per enrollment:
 
-   | Patient | Started | Milestone strip | Next due | Folder | Status |
-   | ------- | ------- | --------------- | -------- | ------ | ------ |
+   | Patient | Started | Last visit | Next due |
+   | ------- | ------- | ---------- | -------- |
 
-   The **milestone strip** is the centrepiece: seven chips — `1d · 2d · 1w · 1mo ·
-   3mo · 6mo · 1yr` — filled once a visit is logged (date on hover), open when
-   pending, amber when due, red when overdue. Interim visits show as a small dot
-   between chips, so "anything in between" is visible without cluttering the
-   sequence.
+   **Last visit** is the most recent follow-up of any kind, interim visits
+   included, with the milestone name beneath the date. The milestone strip lives
+   on the detail page rather than here: seven chips — `1d · 2d · 1w · 1mo · 3mo ·
+   6mo · 1yr` — filled once a visit is logged, open when pending, amber when due,
+   red when overdue, with interim visits shown as dots beside the sequence.
 
 4. **Enrollment detail** (`/ortho-k/[id]`) — the milestone strip full-size, the
    complete visit log (date, milestone, note, who recorded it), an inline
    **Log a follow-up** form (date picker defaulting to today, milestone select
-   defaulting to the next open milestone, note), lens parameters, folder
-   reference, status control, and a link through to the patient chart.
+   defaulting to the next open milestone, note), lens parameters, status
+   control, and a link through to the patient chart.
 
-**Enroll a patient** — a modal on the board (patient search → start date, eyes,
-lens brand/design/params, folder ref) and an **Enroll in Ortho-K** button on the
-patient chart beside the tag row.
+**Enroll a patient** — an inline form on the board (patient search → start date,
+eyes, lens brand/design/params), matching how "New patient" already works in the
+patient directory.
 
 Supporting files: `apps/web/src/lib/orthoK.ts` (milestone table, labels, state
 derivation) and `apps/web/src/components/orthok/MilestoneStrip.tsx`.
 
 ---
 
-## 5. Patients tab — tagging glue
+## 5. Patients tab — tagging glue *(dropped)*
+
+> **Not built.** The tag itself already worked before this branch: enrolling
+> applies `ORTHO_K` automatically (§3), the chip shows in the patient directory
+> and on the chart, and the directory's Filters panel already filters by program.
+> The polish below was dropped as unnecessary. One consequence worth knowing:
+> enrollment starts only from the Ortho-K board, not from the patient chart.
 
 The tag itself already works. Remaining work:
 
@@ -280,7 +282,7 @@ that outbound text must not carry clinical detail.
 4. `MilestoneStrip` + `/ortho-k` board + enroll modal.
 5. `/ortho-k/[id]` detail + log-visit form.
 6. Nav item, nav badge, dashboard panel.
-7. Patients-tab tag glue (§5).
+7. ~~Patients-tab tag glue (§5)~~ — dropped.
 8. `docs/06-code-reference.md` and the `README.md` module list updated.
 
 Steps 1–3 are backend-complete and independently verifiable; the board is built

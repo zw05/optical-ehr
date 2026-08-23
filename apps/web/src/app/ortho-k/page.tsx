@@ -11,7 +11,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
-import MilestoneStrip from '@/components/orthok/MilestoneStrip';
 import PatientSearchBox, { type PatientSuggestion } from '@/components/PatientSearchBox';
 import { api } from '@/lib/api';
 import {
@@ -34,7 +33,6 @@ const EMPTY_ENROLL = {
   lensBrand: '',
   lensDesign: '',
   lensParams: '',
-  folderRef: '',
   notes: '',
 };
 
@@ -65,10 +63,7 @@ function NeedsAttention({
               <span className="badge">{row.patient.mrn}</span>
             </div>
             <p className="ok-attention-due">{describeDue(row.next)}</p>
-            <p className="muted">
-              {row.patient.phone ?? 'No phone on file'}
-              {row.folderRef ? ` · Folder ${row.folderRef}` : ''}
-            </p>
+            <p className="muted">{row.patient.phone ?? 'No phone on file'}</p>
             <button
               type="button"
               className="secondary ok-inline-button"
@@ -137,7 +132,6 @@ export default function OrthoKPage() {
           lensBrand: enroll.lensBrand || undefined,
           lensDesign: enroll.lensDesign || undefined,
           lensParams: enroll.lensParams || undefined,
-          folderRef: enroll.folderRef || undefined,
           notes: enroll.notes || undefined,
         },
       });
@@ -291,14 +285,6 @@ export default function OrthoKPage() {
                 onChange={(e) => setEnroll((f) => ({ ...f, lensParams: e.target.value }))}
               />
             </label>
-            <label>
-              Paper folder
-              <input
-                value={enroll.folderRef}
-                placeholder="Drawer B / 14"
-                onChange={(e) => setEnroll((f) => ({ ...f, folderRef: e.target.value }))}
-              />
-            </label>
             <label className="ok-enroll-wide">
               Notes
               <input
@@ -351,34 +337,40 @@ export default function OrthoKPage() {
               <tr>
                 <th>Patient</th>
                 <th>Started</th>
-                <th>Follow-up sequence</th>
+                <th>Last visit</th>
                 <th>Next due</th>
-                <th>Folder</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <Link href={`/ortho-k/${row.id}`}>
-                      {row.patient.lastName}, {row.patient.firstName}
-                    </Link>
-                    <div className="muted">{row.patient.mrn}</div>
-                  </td>
-                  <td>{formatDate(row.startDate)}</td>
-                  <td>
-                    <MilestoneStrip milestones={row.milestones} visits={row.visits} />
-                  </td>
-                  <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
-                    {describeDue(row.next)}
-                  </td>
-                  <td className={row.folderRef ? undefined : 'muted'}>{row.folderRef ?? '—'}</td>
-                  <td>
-                    <span className="badge">{statusLabel(row.status)}</span>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                // The API returns visits newest first, so the head of the list is
+                // the most recent follow-up, interim visits included.
+                const lastVisit = row.visits[0];
+                return (
+                  <tr key={row.id}>
+                    <td>
+                      <Link href={`/ortho-k/${row.id}`}>
+                        {row.patient.lastName}, {row.patient.firstName}
+                      </Link>
+                      <div className="muted">{row.patient.mrn}</div>
+                    </td>
+                    <td>{formatDate(row.startDate)}</td>
+                    <td className={lastVisit ? undefined : 'muted'}>
+                      {lastVisit ? (
+                        <>
+                          {formatDate(lastVisit.visitDate)}
+                          <div className="muted">{milestoneLabel(lastVisit.milestone)}</div>
+                        </>
+                      ) : (
+                        'None yet'
+                      )}
+                    </td>
+                    <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
+                      {describeDue(row.next)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

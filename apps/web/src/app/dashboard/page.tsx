@@ -381,7 +381,6 @@ export default function DashboardPage() {
                       {describeDue(row.next)}
                     </td>
                     <td className="muted">{row.patient.phone ?? '—'}</td>
-                    <td className="muted">{row.folderRef ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

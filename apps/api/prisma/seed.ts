@@ -197,7 +197,6 @@ async function seedOrthoK(practice: Practice) {
     lensBrand: string;
     lensDesign: string;
     lensParams: string;
-    folderRef: string;
     notes?: string;
   }[] = [
     {
@@ -213,7 +212,6 @@ async function seedOrthoK(practice: Practice) {
       lensBrand: 'Paragon',
       lensDesign: 'CRT Dual Axis',
       lensParams: 'OD 8.6 / -2.75 / 33.0   OS 8.7 / -2.50 / 33.0',
-      folderRef: 'Drawer B / 14',
       notes: 'Lenses ordered; dispense visit booked.',
     },
     {
@@ -235,7 +233,6 @@ async function seedOrthoK(practice: Practice) {
       lensBrand: 'Euclid',
       lensDesign: 'Emerald',
       lensParams: 'OD 8.8 / -3.25 / 10.6   OS 8.8 / -3.00 / 10.6',
-      folderRef: 'Drawer B / 21',
       notes: 'Interim visit at two weeks for lens handling.',
     },
     {
@@ -251,7 +248,6 @@ async function seedOrthoK(practice: Practice) {
       lensBrand: 'Paragon',
       lensDesign: 'CRT',
       lensParams: 'OD 8.9 / -1.75 / 33.0   OS 8.9 / -1.75 / 33.0',
-      folderRef: 'Drawer C / 03',
       notes: 'Parent rescheduled twice; phone is the best contact.',
     },
     {
@@ -274,7 +270,6 @@ async function seedOrthoK(practice: Practice) {
       lensBrand: 'Euclid',
       lensDesign: 'Emerald',
       lensParams: 'OD 8.7 / -4.00 / 10.6   OS 8.6 / -4.25 / 10.6',
-      folderRef: 'Drawer A / 07',
     },
   ];
 
@@ -330,7 +325,6 @@ async function seedOrthoK(practice: Practice) {
         lensBrand: row.lensBrand,
         lensDesign: row.lensDesign,
         lensParams: row.lensParams,
-        folderRef: row.folderRef,
         notes: row.notes,
         visits: { create: visits },
       },
