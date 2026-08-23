@@ -28,6 +28,7 @@ type NavIcon =
   | 'patients'
   | 'schedule'
   | 'exams'
+  | 'orthoK'
   | 'orders'
   | 'recalls'
   | 'inventory'
@@ -46,6 +47,7 @@ const NAV_ITEMS: {
     { href: '/patients', label: 'Patients', icon: 'patients' },
     { href: '/schedule', label: 'Schedule', icon: 'schedule' },
     { href: '/exams', label: 'Exams', icon: 'exams', roles: ['TECHNICIAN', 'DOCTOR'] },
+    { href: '/ortho-k', label: 'Ortho-K', icon: 'orthoK' },
     { href: '/orders', label: 'Orders', icon: 'orders' },
     { href: '/recalls', label: 'Recalls', icon: 'recalls' },
     { href: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['OPTICIAN', 'ADMIN'] },
@@ -98,6 +100,14 @@ function NavIconSvg({ name }: { name: NavIcon }) {
           <circle cx="12" cy="12" r="9" />
           <circle cx="12" cy="12" r="4" />
           <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+        </svg>
+      );
+    case 'orthoK':
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="5.5" />
+          <circle cx="12" cy="12" r="2" />
         </svg>
       );
     case 'orders':

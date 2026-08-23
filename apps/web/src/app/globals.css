@@ -3270,3 +3270,235 @@ html[data-reduced-motion='on'] *::after {
     display: none;
   }
 }
+
+/* ---------- Ortho-K program board ---------- */
+
+.ok-intro {
+  margin-top: -0.5rem;
+  max-width: 60ch;
+}
+
+.ok-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ok-filters {
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ok-filters label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* The follow-up strip: one chip per scheduled check, read left to right. */
+.ok-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.ok-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: default;
+}
+
+.ok-strip-full .ok-chip {
+  min-width: 4.6rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.ok-chip-date {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-subtle);
+  margin-top: 0.15rem;
+}
+
+/* Done reads as filled and settled; the open states escalate in weight. */
+.ok-chip-done {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.ok-chip-upcoming {
+  border-style: dashed;
+  color: var(--text-subtle);
+}
+
+.ok-chip-due {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.ok-chip-overdue {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Unscheduled visits sit beside the sequence rather than inside it. */
+.ok-interim {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+  cursor: default;
+}
+
+.ok-interim-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.ok-interim-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: 0.15rem;
+}
+
+.ok-table td {
+  vertical-align: top;
+}
+
+.ok-overdue-text {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.ok-attention {
+  border-color: var(--danger);
+}
+
+.ok-attention-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+
+.ok-attention-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+}
+
+.ok-attention-overdue {
+  border-left-color: var(--danger);
+}
+
+.ok-attention-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ok-attention-name {
+  font-weight: 600;
+}
+
+.ok-attention-due {
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ok-attention-card p.muted {
+  margin: 0 0 0.5rem;
+}
+
+.ok-inline-button {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.ok-enroll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.ok-enroll-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.ok-enroll-wide {
+  grid-column: 1 / -1;
+}
+
+.ok-hint {
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+.ok-chosen {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control-min-height);
+  color: var(--text);
+}
+
+.ok-quicklog-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ok-quicklog-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.ok-detail-link {
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .ok-filters {
+    width: 100%;
+  }
+
+  .ok-enroll-grid {
+    grid-template-columns: 1fr;
+  }
+}
