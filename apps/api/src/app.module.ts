@@ -19,6 +19,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { OrdersModule } from './orders/orders.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { RecallsModule } from './recalls/recalls.module';
+import { OrthoKModule } from './ortho-k/ortho-k.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AcceptedPayersModule } from './accepted-payers/accepted-payers.module';
 import { UsersModule } from './users/users.module';
@@ -44,6 +45,7 @@ import { ContactLensPricingModule } from './contact-lens-pricing/contact-lens-pr
     OrdersModule,
     InventoryModule,
     RecallsModule,
+    OrthoKModule,
     TasksModule,
     AcceptedPayersModule,
     UsersModule,
