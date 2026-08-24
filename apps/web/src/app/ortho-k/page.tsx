@@ -36,7 +36,13 @@ const EMPTY_ENROLL = {
   notes: '',
 };
 
-/** Cards at the top of the board: the follow-ups someone has to chase today. */
+/**
+ * The follow-ups someone has to chase today, at the top of the board.
+ *
+ * A compact list rather than a grid of cards: this is a queue to scan and work
+ * through, and the surrounding app states urgency the same quiet way — the
+ * overdue phrase carries the colour, and nothing else repeats it.
+ */
 function NeedsAttention({
   rows,
   onLog,
@@ -45,35 +51,45 @@ function NeedsAttention({
   onLog: (row: OrthoKEnrollment) => void;
 }) {
   if (rows.length === 0) return null;
+
+  const overdue = rows.filter((r) => r.next?.state === 'OVERDUE').length;
+  const due = rows.length - overdue;
+  const summary = [
+    overdue > 0 ? `${overdue} overdue` : null,
+    due > 0 ? `${due} due now` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <div className="card ok-attention">
+    <div className="card">
       <h2 className="ok-section-title">
-        Needs attention <span className="badge danger">{rows.length}</span>
+        Needs attention
+        <span className="ok-section-note muted">{summary}</span>
       </h2>
-      <div className="ok-attention-grid">
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            className={`ok-attention-card ok-attention-${row.next?.state.toLowerCase()}`}
-          >
-            <div className="ok-attention-head">
-              <Link href={`/ortho-k/${row.id}`} className="ok-attention-name">
-                {row.patient.lastName}, {row.patient.firstName}
-              </Link>
-              <span className="badge">{row.patient.mrn}</span>
-            </div>
-            <p className="ok-attention-due">{describeDue(row.next)}</p>
-            <p className="muted">{row.patient.phone ?? 'No phone on file'}</p>
-            <button
-              type="button"
-              className="secondary ok-inline-button"
-              onClick={() => onLog(row)}
-            >
-              Log visit
-            </button>
-          </div>
-        ))}
-      </div>
+      <table>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>
+                <Link href={`/ortho-k/${row.id}`}>
+                  {row.patient.lastName}, {row.patient.firstName}
+                </Link>{' '}
+                <span className="muted">{row.patient.mrn}</span>
+              </td>
+              <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
+                {describeDue(row.next)}
+              </td>
+              <td className="muted">{row.patient.phone ?? '—'}</td>
+              <td className="ok-row-action">
+                <button type="button" className="secondary ok-inline-button" onClick={() => onLog(row)}>
+                  Log visit
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

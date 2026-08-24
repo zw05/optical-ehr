@@ -3393,47 +3393,11 @@ html[data-reduced-motion='on'] *::after {
   font-weight: 500;
 }
 
-.ok-attention {
-  border-color: var(--danger);
-}
-
-.ok-attention-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 0.75rem;
-}
-
-.ok-attention-card {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--warning);
-  border-radius: var(--radius);
-  padding: 0.7rem 0.85rem;
-}
-
-.ok-attention-overdue {
-  border-left-color: var(--danger);
-}
-
-.ok-attention-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.ok-attention-name {
-  font-weight: 600;
-}
-
-.ok-attention-due {
-  margin: 0.3rem 0 0.15rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.ok-attention-card p.muted {
-  margin: 0 0 0.5rem;
+/* Actions sit at the end of a row, sized to their label so the row stays tight. */
+.ok-row-action {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .ok-inline-button {
