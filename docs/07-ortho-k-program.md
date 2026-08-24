@@ -221,14 +221,15 @@ Page layout:
    rather than a day — an overdue one adds the exact days late and turns red.
 
    **Last visit** is the most recent follow-up of any kind, interim visits
-   included, with the milestone name beneath the date. The milestone strip lives
-   on the detail page rather than here: seven chips — `1d · 2d · 1w · 1mo · 3mo ·
-   6mo · 1yr` — filled once a visit is logged, open when pending, amber when due,
-   red when overdue, with interim visits shown as dots beside the sequence.
+   included, with the milestone name beneath the date. The follow-up sequence
+   itself lives on the detail page rather than here.
 
-4. **Enrollment detail** (`/ortho-k/[id]`) — the milestone strip full-size for the
+4. **Enrollment detail** (`/ortho-k/[id]`) — the follow-up sequence for the
    **year in progress only**, so it stays readable however many years of
-   six-month checks are behind the patient; an inline **Log a follow-up** form
+   six-month checks are behind the patient. It is drawn as a timeline — label,
+   marker on a connecting rule, date — and is neutral throughout except for the
+   one check that is due or overdue: colouring every state turns the row into a
+   traffic light and buries the item staff need to act on. Then an inline **Log a follow-up** form
    (date picker defaulting to today, milestone select defaulting to the next open
    milestone, note); lens parameters; status control; and a link to the chart.
 

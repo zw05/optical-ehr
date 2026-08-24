@@ -3301,87 +3301,117 @@ html[data-reduced-motion='on'] *::after {
   color: var(--text-muted);
 }
 
-/* The follow-up strip: one chip per scheduled check, read left to right. */
-.ok-strip {
+/* The follow-up sequence, drawn as a timeline: label above, marker on the rule,
+   date below. Neutral throughout — only a check that is due or overdue takes a
+   colour, so the row shows what needs doing rather than lighting up everywhere. */
+.ok-track {
   display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
 }
 
-.ok-chip {
-  display: inline-flex;
+.ok-track-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 4.2rem;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-width: 2.4rem;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: transparent;
+  gap: 0.3rem;
+  padding: 0 0.25rem;
   cursor: default;
 }
 
-.ok-strip-full .ok-chip {
-  min-width: 4.6rem;
-  padding: 0.35rem 0.5rem;
-  font-size: 0.8rem;
+/* The connecting rule, drawn either side of each marker and clipped at the ends. */
+.ok-track-step::before,
+.ok-track-step::after {
+  content: '';
+  position: absolute;
+  top: 1.55rem;
+  height: 1px;
+  background: var(--border-strong);
 }
 
-.ok-chip-date {
-  font-size: 0.68rem;
-  font-weight: 400;
+.ok-track-step::before {
+  left: 0;
+  right: 50%;
+}
+
+.ok-track-step::after {
+  left: 50%;
+  right: 0;
+}
+
+.ok-track-step:first-child::before,
+.ok-track-step:last-child::after {
+  display: none;
+}
+
+.ok-track-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ok-track-marker {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.ok-track-date {
+  font-size: 0.7rem;
   color: var(--text-subtle);
-  margin-top: 0.15rem;
+  white-space: nowrap;
 }
 
-/* Done reads as filled and settled; the open states escalate in weight. */
-.ok-chip-done {
-  background: var(--success-soft);
-  border-color: var(--success);
-  color: var(--success);
+/* Done: settled, not celebrated — a filled marker and ordinary text. */
+.ok-track-done .ok-track-marker {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
 }
 
-.ok-chip-upcoming {
-  border-style: dashed;
+.ok-track-done .ok-track-label {
+  color: var(--text);
+}
+
+/* Upcoming: present but recessive. */
+.ok-track-upcoming .ok-track-label,
+.ok-track-upcoming .ok-track-date {
   color: var(--text-subtle);
 }
 
-.ok-chip-due {
-  background: var(--warning-soft);
-  border-color: var(--warning);
+/* The two states that need someone to act are the only coloured marks here. */
+.ok-track-due .ok-track-label {
   color: var(--warning);
 }
 
-.ok-chip-overdue {
-  background: var(--danger-soft);
-  border-color: var(--danger);
+.ok-track-due .ok-track-marker {
+  background: var(--warning);
+  border-color: var(--warning);
+}
+
+.ok-track-overdue .ok-track-label,
+.ok-track-overdue .ok-track-date {
   color: var(--danger);
 }
 
-/* Unscheduled visits sit beside the sequence rather than inside it. */
-.ok-interim {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: 0.35rem;
-  cursor: default;
+.ok-track-overdue .ok-track-marker {
+  background: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
 }
 
-.ok-interim-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.ok-interim-count {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-left: 0.15rem;
+.ok-track-interim {
+  margin: 0.85rem 0 0;
 }
 
 .ok-table td {

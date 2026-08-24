@@ -188,11 +188,7 @@ export default function OrthoKDetailPage() {
             <span className="muted ok-section-note">Year {enrollment.programYear}</span>
           )}
         </h2>
-        <MilestoneStrip
-          milestones={currentYearMilestones}
-          visits={currentYear?.visits ?? []}
-          size="full"
-        />
+        <MilestoneStrip milestones={currentYearMilestones} visits={currentYear?.visits ?? []} />
         <p className={`ok-next-line${overdue ? ' ok-overdue-text' : ''}`}>
           {enrollment.startDate
             ? describeDue(enrollment.next)
