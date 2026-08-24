@@ -55,7 +55,7 @@ export default function MilestoneStrip({
         >
           <span className="ok-chip-label">
             {MILESTONE_SHORT_LABELS[status.milestone]}
-            {status.milestone === 'ANNUAL' && status.occurrence > 1 ? ` ×${status.occurrence}` : ''}
+            {status.milestone === 'SEMIANNUAL' && status.occurrence > 1 ? ` ×${status.occurrence}` : ''}
           </span>
           {size === 'full' && (
             <span className="ok-chip-date">

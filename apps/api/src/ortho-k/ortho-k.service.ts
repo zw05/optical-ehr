@@ -15,9 +15,17 @@ import {
   milestoneStates,
   nextMilestone,
   parseDateOnly,
+  programYear,
   type MilestoneState,
   type MilestoneStatus,
 } from './milestones';
+
+/** Milestones a patient can have more than one of. */
+const REPEATABLE_MILESTONES = new Set<OrthoKMilestone>([
+  OrthoKMilestone.SEMIANNUAL,
+  OrthoKMilestone.INTERIM,
+  OrthoKMilestone.NEW_LENSES,
+]);
 
 /** Recall rows this module owns are tagged by reason prefix, since Recall has no FK to an enrollment. */
 const RECALL_PREFIX = 'Ortho-K — ';
@@ -58,6 +66,8 @@ export interface OrthoKBoardFilters {
 export type OrthoKBoardRow = EnrollmentRow & {
   milestones: MilestoneStatus[];
   next: MilestoneStatus | null;
+  /** Which year of lenses the patient is on; 1 until the first renewal is logged. */
+  programYear: number;
 };
 
 /**
@@ -220,7 +230,8 @@ export class OrthoKService {
    * Records a follow-up that happened. Completing the six numbered checks moves
    * the enrollment onto annual review.
    *
-   * Numbered milestones are recorded once; INTERIM and ANNUAL repeat.
+   * Numbered milestones are recorded once; recurring checks, interim visits, and
+   * lens renewals repeat.
    */
   async logVisit(
     practiceId: string,
@@ -239,8 +250,9 @@ export class OrthoKService {
       );
     }
 
-    const repeatable =
-      dto.milestone === OrthoKMilestone.INTERIM || dto.milestone === OrthoKMilestone.ANNUAL;
+    // Only the numbered checks happen once; recurring checks, interim visits, and
+    // lens renewals all repeat for as long as the patient stays in the program.
+    const repeatable = REPEATABLE_MILESTONES.has(dto.milestone);
     if (!repeatable && enrollment.visits.some((v) => v.milestone === dto.milestone)) {
       throw new BadRequestException(
         `${MILESTONE_LABELS[dto.milestone]} follow-up is already recorded`,
@@ -329,6 +341,7 @@ export class OrthoKService {
       ...enrollment,
       milestones: milestoneStates(enrollment.startDate, visits),
       next: nextMilestone(enrollment.startDate, visits),
+      programYear: programYear(visits),
     };
   }
 

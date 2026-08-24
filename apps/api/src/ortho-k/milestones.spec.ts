@@ -8,6 +8,7 @@ import {
   nextMilestone,
   ORTHO_K_SEQUENCE,
   parseDateOnly,
+  programYear,
   startOfDay,
   type MilestoneState,
   type VisitLike,
@@ -53,11 +54,6 @@ describe('milestoneDueDate', () => {
     expect(milestoneDueDate(START, OrthoKMilestone.MONTH_1)).toEqual(day(30));
     expect(milestoneDueDate(START, OrthoKMilestone.MONTH_3)).toEqual(day(90));
     expect(milestoneDueDate(START, OrthoKMilestone.MONTH_6)).toEqual(day(180));
-  });
-
-  it('repeats annual reviews a year apart', () => {
-    expect(milestoneDueDate(START, OrthoKMilestone.ANNUAL, 1)).toEqual(day(365));
-    expect(milestoneDueDate(START, OrthoKMilestone.ANNUAL, 2)).toEqual(day(730));
   });
 
   it('ignores the clock time on the start date', () => {
@@ -115,23 +111,70 @@ describe('milestoneStates sequence shape', () => {
     expect(nextMilestone(null, [], day(400))).toBeNull();
   });
 
-  it('withholds annual reviews until the six numbered checks are logged', () => {
+  it('withholds the recurring check until the six numbered checks are logged', () => {
     const partial = NUMBERED_VISITS.slice(0, 5);
     const before = milestoneStates(START, partial, day(400));
-    expect(before.map((s) => s.milestone)).not.toContain(OrthoKMilestone.ANNUAL);
+    expect(before.map((s) => s.milestone)).not.toContain(OrthoKMilestone.SEMIANNUAL);
 
     const after = milestoneStates(START, NUMBERED_VISITS, day(400));
-    expect(after.filter((s) => s.milestone === OrthoKMilestone.ANNUAL)).toHaveLength(1);
+    expect(after.filter((s) => s.milestone === OrthoKMilestone.SEMIANNUAL)).toHaveLength(1);
   });
 
-  it('schedules the following year once an annual review is logged', () => {
-    const visits = [...NUMBERED_VISITS, visit(OrthoKMilestone.ANNUAL, 365)];
-    const annual = milestoneStates(START, visits, day(400)).filter(
-      (s) => s.milestone === OrthoKMilestone.ANNUAL,
+  it('dates the recurring check six months from the last visit, not from the start', () => {
+    // Six-month check happened on day 180, so the next one is owed on day 360.
+    const recurring = milestoneStates(START, NUMBERED_VISITS, day(200)).filter(
+      (s) => s.milestone === OrthoKMilestone.SEMIANNUAL,
     );
-    expect(annual).toHaveLength(2);
-    expect(annual[0]).toMatchObject({ occurrence: 1, state: 'DONE' });
-    expect(annual[1]).toMatchObject({ occurrence: 2, dueDate: day(730), state: 'UPCOMING' });
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]).toMatchObject({ occurrence: 1, dueDate: day(360), state: 'UPCOMING' });
+  });
+
+  it('rolls the next check forward from a late visit rather than stacking them up', () => {
+    // Seen on day 400 instead of day 360; the next one is 6 months from that visit.
+    const visits = [...NUMBERED_VISITS, visit(OrthoKMilestone.SEMIANNUAL, 400)];
+    const recurring = milestoneStates(START, visits, day(410)).filter(
+      (s) => s.milestone === OrthoKMilestone.SEMIANNUAL,
+    );
+    expect(recurring).toHaveLength(2);
+    expect(recurring[0]).toMatchObject({ occurrence: 1, state: 'DONE', visitDate: day(400) });
+    expect(recurring[1]).toMatchObject({ occurrence: 2, dueDate: day(580), state: 'UPCOMING' });
+  });
+
+  it('keeps recurring checks coming indefinitely', () => {
+    const visits = [
+      ...NUMBERED_VISITS,
+      visit(OrthoKMilestone.SEMIANNUAL, 360),
+      visit(OrthoKMilestone.SEMIANNUAL, 540),
+      visit(OrthoKMilestone.SEMIANNUAL, 720),
+    ];
+    const recurring = milestoneStates(START, visits, day(730)).filter(
+      (s) => s.milestone === OrthoKMilestone.SEMIANNUAL,
+    );
+    expect(recurring).toHaveLength(4);
+    expect(recurring[3]).toMatchObject({ occurrence: 4, dueDate: day(900) });
+  });
+
+  it('does not let an interim visit push the next recurring check back', () => {
+    // A lens problem seen on day 300 must not delay the check owed on day 360.
+    const visits = [...NUMBERED_VISITS, visit(OrthoKMilestone.INTERIM, 300)];
+    const next = milestoneStates(START, visits, day(310)).find(
+      (s) => s.milestone === OrthoKMilestone.SEMIANNUAL && s.state !== 'DONE',
+    );
+    expect(next).toMatchObject({ dueDate: day(360) });
+  });
+
+  it('counts a lens renewal as the patient coming back', () => {
+    const visits = [...NUMBERED_VISITS, visit(OrthoKMilestone.NEW_LENSES, 365)];
+    const next = milestoneStates(START, visits, day(370)).find(
+      (s) => s.milestone === OrthoKMilestone.SEMIANNUAL && s.state !== 'DONE',
+    );
+    expect(next).toMatchObject({ dueDate: day(545) });
+  });
+
+  it('never lets a lens renewal satisfy a numbered milestone', () => {
+    const visits = [visit(OrthoKMilestone.NEW_LENSES, 7)];
+    expect(stateOn(OrthoKMilestone.WEEK_1, 7, visits)).toBe('DUE');
+    expect(isScheduledMilestone(OrthoKMilestone.NEW_LENSES)).toBe(false);
   });
 
   it('never lets an interim visit satisfy a numbered milestone', () => {
@@ -173,9 +216,9 @@ describe('nextMilestone', () => {
     });
   });
 
-  it('falls through to the annual review once the sequence is complete', () => {
+  it('falls through to the recurring check once the sequence is complete', () => {
     expect(nextMilestone(START, NUMBERED_VISITS, day(200))).toMatchObject({
-      milestone: OrthoKMilestone.ANNUAL,
+      milestone: OrthoKMilestone.SEMIANNUAL,
       occurrence: 1,
       state: 'UPCOMING',
     });
@@ -190,6 +233,31 @@ describe('isSequenceComplete', () => {
   it('is true once all six are logged, ignoring interim visits', () => {
     expect(isSequenceComplete(NUMBERED_VISITS)).toBe(true);
     expect(isSequenceComplete([visit(OrthoKMilestone.INTERIM, 4)])).toBe(false);
+  });
+});
+
+describe('programYear', () => {
+  it('counts the original lenses as year one', () => {
+    expect(programYear([])).toBe(1);
+    expect(programYear(NUMBERED_VISITS)).toBe(1);
+  });
+
+  it('advances a year for every lens renewal', () => {
+    const visits = [
+      ...NUMBERED_VISITS,
+      visit(OrthoKMilestone.NEW_LENSES, 365),
+      visit(OrthoKMilestone.NEW_LENSES, 730),
+    ];
+    expect(programYear(visits)).toBe(3);
+  });
+
+  it('ignores ordinary follow-ups', () => {
+    const visits = [
+      ...NUMBERED_VISITS,
+      visit(OrthoKMilestone.SEMIANNUAL, 360),
+      visit(OrthoKMilestone.INTERIM, 400),
+    ];
+    expect(programYear(visits)).toBe(1);
   });
 });
 

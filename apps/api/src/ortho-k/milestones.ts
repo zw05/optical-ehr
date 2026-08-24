@@ -21,16 +21,19 @@ export const ORTHO_K_SEQUENCE = [
   OrthoKMilestone.MONTH_1,
   OrthoKMilestone.MONTH_3,
   OrthoKMilestone.MONTH_6,
-  OrthoKMilestone.ANNUAL,
+  OrthoKMilestone.SEMIANNUAL,
 ] as const;
 
 export type ScheduledMilestone = (typeof ORTHO_K_SEQUENCE)[number];
 
 /**
- * Days after the first night of lens wear, and the grace window either side
- * before the follow-up counts as missed. The early checks are deliberately
- * tight: a day-1 visit that slips a day is a real miss, while a six-month
- * review three weeks out is still on schedule.
+ * Days to the check, and the grace window either side before it counts as
+ * missed. The early checks are deliberately tight: a day-1 visit that slips a
+ * day is a real miss, while a six-month review three weeks out is on schedule.
+ *
+ * The numbered milestones count from the first night of wear. SEMIANNUAL is the
+ * exception: it recurs for as long as the patient stays in the program, so its
+ * offset counts from their last visit rather than from a fixed anchor.
  */
 export const MILESTONE_SCHEDULE: Record<
   ScheduledMilestone,
@@ -42,7 +45,7 @@ export const MILESTONE_SCHEDULE: Record<
   [OrthoKMilestone.MONTH_1]: { offsetDays: 30, windowDays: 7 },
   [OrthoKMilestone.MONTH_3]: { offsetDays: 90, windowDays: 14 },
   [OrthoKMilestone.MONTH_6]: { offsetDays: 180, windowDays: 21 },
-  [OrthoKMilestone.ANNUAL]: { offsetDays: 365, windowDays: 30 },
+  [OrthoKMilestone.SEMIANNUAL]: { offsetDays: 180, windowDays: 30 },
 };
 
 export const MILESTONE_LABELS: Record<OrthoKMilestone, string> = {
@@ -52,8 +55,9 @@ export const MILESTONE_LABELS: Record<OrthoKMilestone, string> = {
   [OrthoKMilestone.MONTH_1]: '1 month',
   [OrthoKMilestone.MONTH_3]: '3 months',
   [OrthoKMilestone.MONTH_6]: '6 months',
-  [OrthoKMilestone.ANNUAL]: 'Annual review',
+  [OrthoKMilestone.SEMIANNUAL]: '6-month check',
   [OrthoKMilestone.INTERIM]: 'Interim visit',
+  [OrthoKMilestone.NEW_LENSES]: 'New lenses',
 };
 
 /** Chip captions for the milestone strip on the Ortho-K board. */
@@ -64,8 +68,9 @@ export const MILESTONE_SHORT_LABELS: Record<OrthoKMilestone, string> = {
   [OrthoKMilestone.MONTH_1]: '1mo',
   [OrthoKMilestone.MONTH_3]: '3mo',
   [OrthoKMilestone.MONTH_6]: '6mo',
-  [OrthoKMilestone.ANNUAL]: '1yr',
+  [OrthoKMilestone.SEMIANNUAL]: '+6mo',
   [OrthoKMilestone.INTERIM]: '+',
+  [OrthoKMilestone.NEW_LENSES]: 'Rx',
 };
 
 /**
@@ -133,27 +138,33 @@ export function daysBetween(from: Date, to: Date): number {
 }
 
 /**
- * When a milestone falls due.
- * @param occurrence Annual reviews repeat, so the second is a year after the first.
+ * When a numbered milestone falls due, counting from the first night of wear.
+ * The recurring six-month check is not covered here: it rolls from the patient's
+ * last visit, so it is derived in {@link milestoneStates} instead.
  */
-export function milestoneDueDate(
-  startDate: Date,
-  milestone: ScheduledMilestone,
-  occurrence = 1,
-): Date {
+export function milestoneDueDate(startDate: Date, milestone: ScheduledMilestone): Date {
   const { offsetDays } = MILESTONE_SCHEDULE[milestone];
-  return addDays(startOfDay(startDate), offsetDays * occurrence);
+  return addDays(startOfDay(startDate), offsetDays);
+}
+
+/** Visits that count as the patient coming back; interim checks do not reset the clock. */
+function resetsRecurringClock(visit: VisitLike): boolean {
+  return visit.milestone !== OrthoKMilestone.INTERIM;
 }
 
 /**
- * The whole follow-up strip for one enrollment: the six numbered checks plus the
- * annual reviews — every one already completed, and the next one still owed.
+ * The whole follow-up strip for one enrollment: the six numbered checks, then the
+ * recurring six-month checks — every one already completed, and the next one owed.
  *
  * Milestones are scored independently rather than as a chain, so a patient who
  * skipped the one-month check and turned up at three months shows one overdue
- * and one done, which is what the front desk needs to see. Annual reviews only
- * enter the strip once the six-month check is logged, since that is what ends
- * the fitting sequence.
+ * and one done, which is what the front desk needs to see.
+ *
+ * The recurring check only enters the strip once the numbered sequence is
+ * complete, and is dated six months from the patient's last real visit rather
+ * than from a fixed calendar: a patient seen late simply moves the next check
+ * out by the same amount. Interim visits are excluded from that anchor, so a
+ * lens problem squeezed in between checks does not push the next one back.
  *
  * @param visits  Every visit logged against the enrollment, in any order.
  * @param asOf    Defaults to today; injected by tests and reports.
@@ -170,39 +181,61 @@ export function milestoneStates(
   const statuses: MilestoneStatus[] = [];
 
   for (const milestone of ORTHO_K_SEQUENCE) {
-    if (milestone === OrthoKMilestone.ANNUAL) continue;
+    if (milestone === OrthoKMilestone.SEMIANNUAL) continue;
     const visit = visits.find((v) => v.milestone === milestone);
-    statuses.push(buildStatus(startDate, milestone, 1, visit?.visitDate ?? null, today));
+    statuses.push(
+      buildStatus(
+        milestone,
+        1,
+        milestoneDueDate(startDate, milestone),
+        visit?.visitDate ?? null,
+        today,
+      ),
+    );
   }
 
   const sequenceComplete = statuses.every((s) => s.state === 'DONE');
   if (!sequenceComplete) return statuses;
 
-  // Annual reviews: one entry per review already logged, then the next one owed.
-  const annualVisits = visits
-    .filter((v) => v.milestone === OrthoKMilestone.ANNUAL)
+  // One entry per recurring check already done, each dated when it happened.
+  const recurring = visits
+    .filter((v) => v.milestone === OrthoKMilestone.SEMIANNUAL)
     .sort((a, b) => a.visitDate.getTime() - b.visitDate.getTime());
 
-  annualVisits.forEach((visit, index) => {
+  recurring.forEach((visit, index) => {
     statuses.push(
-      buildStatus(startDate, OrthoKMilestone.ANNUAL, index + 1, visit.visitDate, today),
+      buildStatus(OrthoKMilestone.SEMIANNUAL, index + 1, visit.visitDate, visit.visitDate, today),
     );
   });
+
+  // Then the next one owed, six months on from when they were last seen.
+  const anchor = visits
+    .filter(resetsRecurringClock)
+    .reduce(
+      (latest, v) => (latest === null || v.visitDate > latest ? v.visitDate : latest),
+      null as Date | null,
+    );
+  const { offsetDays } = MILESTONE_SCHEDULE[OrthoKMilestone.SEMIANNUAL];
   statuses.push(
-    buildStatus(startDate, OrthoKMilestone.ANNUAL, annualVisits.length + 1, null, today),
+    buildStatus(
+      OrthoKMilestone.SEMIANNUAL,
+      recurring.length + 1,
+      addDays(startOfDay(anchor ?? startDate), offsetDays),
+      null,
+      today,
+    ),
   );
 
   return statuses;
 }
 
 function buildStatus(
-  startDate: Date,
   milestone: ScheduledMilestone,
   occurrence: number,
+  dueDate: Date,
   visitDate: Date | null,
   today: Date,
 ): MilestoneStatus {
-  const dueDate = milestoneDueDate(startDate, milestone, occurrence);
   const { windowDays } = MILESTONE_SCHEDULE[milestone];
 
   if (visitDate) {
@@ -227,8 +260,8 @@ function buildStatus(
 
 /**
  * The follow-up the practice owes this patient next: the most overdue one if any
- * have been missed, otherwise the earliest still outstanding. Null once every
- * milestone is done, which only happens before an annual review is scheduled.
+ * have been missed, otherwise the earliest still outstanding. Null only before a
+ * start date exists, since the recurring check never runs out.
  */
 export function nextMilestone(
   startDate: Date | null,
@@ -246,7 +279,17 @@ export function nextMilestone(
 
 /** True once the six numbered checks are logged, which moves an enrollment to MAINTENANCE. */
 export function isSequenceComplete(visits: VisitLike[]): boolean {
-  return ORTHO_K_SEQUENCE.filter((m) => m !== OrthoKMilestone.ANNUAL).every((m) =>
+  return ORTHO_K_SEQUENCE.filter((m) => m !== OrthoKMilestone.SEMIANNUAL).every((m) =>
     visits.some((v) => v.milestone === m),
   );
+}
+
+/**
+ * Which year of the program the patient is in, counted by how many times they
+ * have been given lenses: the original pair is year 1, and every NEW_LENSES
+ * visit starts the next year. Derived rather than stored so back-dating a
+ * renewal that was missed at the time corrects the count immediately.
+ */
+export function programYear(visits: VisitLike[]): number {
+  return 1 + visits.filter((v) => v.milestone === OrthoKMilestone.NEW_LENSES).length;
 }

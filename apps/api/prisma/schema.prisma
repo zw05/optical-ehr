@@ -839,9 +839,11 @@ model CodeCatalogEntry {
 // ---------- Ortho-K program ----------
 
 /// A point in the orthokeratology follow-up sequence. The numbered milestones run
-/// in the order declared here; INTERIM is an unscheduled visit that is logged but
-/// never satisfies a numbered milestone, and ANNUAL recurs yearly once the
-/// six-month sequence is complete.
+/// in the order declared here, anchored to the first night of wear. Once they are
+/// done the patient stays on SEMIANNUAL checks, which roll forward from the last
+/// visit rather than a fixed calendar. INTERIM is an unscheduled visit that never
+/// satisfies a milestone, and NEW_LENSES records a lens renewal — the count of
+/// those is what makes a patient "in their sixth year" of the program.
 enum OrthoKMilestone {
   DAY_1
   DAY_2
@@ -849,8 +851,9 @@ enum OrthoKMilestone {
   MONTH_1
   MONTH_3
   MONTH_6
+  SEMIANNUAL
   INTERIM
-  ANNUAL
+  NEW_LENSES
 }
 
 enum OrthoKStatus {

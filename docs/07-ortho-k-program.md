@@ -39,8 +39,9 @@ enum OrthoKMilestone {
   MONTH_1
   MONTH_3
   MONTH_6
-  INTERIM   // anything in between: unscheduled check, lens issue, re-fit visit
-  ANNUAL    // recurring yearly review once the six-month sequence is complete
+  SEMIANNUAL  // recurring six-month check once the numbered sequence is complete
+  INTERIM     // anything in between: unscheduled check, lens issue, re-fit visit
+  NEW_LENSES  // a lens renewal; counting these gives the patient's program year
 }
 
 enum OrthoKStatus {
@@ -117,10 +118,26 @@ Offsets from `startDate`, with a grace window before a milestone counts as overd
 | `MONTH_1` | +30 days | ±7 days |
 | `MONTH_3` | +90 days | ±14 days |
 | `MONTH_6` | +180 days | ±21 days |
-| `ANNUAL` | +365 days, then yearly | ±30 days |
+| `SEMIANNUAL` | +180 days from the **last visit**, recurring | ±30 days |
 
-`INTERIM` has no due date — it is logged, never scheduled, and never satisfies a
-milestone. The table lives in one shared module, `apps/api/src/ortho-k/milestones.ts`,
+The numbered checks count from the first night of wear. `SEMIANNUAL` is the
+exception: it rolls forward from the patient's most recent visit, so someone seen
+late simply has their next check pushed out by the same amount instead of
+accumulating a backlog. Interim visits are excluded from that anchor, so a lens
+problem squeezed in between checks does not delay the next real one; a lens
+renewal does count, since the patient came in.
+
+`INTERIM` and `NEW_LENSES` have no due date — they are logged, never scheduled,
+and never satisfy a milestone.
+
+### Program year
+
+A patient's **year** is how many sets of lenses they have been given: the original
+pair is year 1, and each `NEW_LENSES` visit starts the next. It is derived from
+the visit log rather than stored, so back-dating a renewal that was missed at the
+time corrects the count immediately. A renewal does **not** restart the early
+sequence — the patient is already adapted — it only advances the year and rolls
+the six-month clock. The table lives in one shared module, `apps/api/src/ortho-k/milestones.ts`,
 mirrored in `apps/web/src/lib/orthoK.ts` so the board and the API agree on what
 "overdue" means.
 
@@ -131,6 +148,7 @@ drift out of sync:
 - `dueDate` — `startDate + offset`.
 - `state` — `DONE` | `UPCOMING` | `DUE` (inside the window) | `OVERDUE` (past window).
 - `status` auto-advances `ACTIVE → MAINTENANCE` once a `MONTH_6` visit is logged.
+- `programYear` — 1 + the number of `NEW_LENSES` visits.
 
 ---
 
@@ -192,8 +210,8 @@ Page layout:
    search box.
 3. **Program board** — one row per enrollment:
 
-   | Patient | Started | Last visit | Next due |
-   | ------- | ------- | ---------- | -------- |
+   | Patient | Started (+ year) | Last visit | Next due |
+   | ------- | ---------------- | ---------- | -------- |
 
    **Last visit** is the most recent follow-up of any kind, interim visits
    included, with the milestone name beneath the date. The milestone strip lives

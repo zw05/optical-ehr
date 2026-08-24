@@ -354,7 +354,10 @@ export default function OrthoKPage() {
                       </Link>
                       <div className="muted">{row.patient.mrn}</div>
                     </td>
-                    <td>{formatDate(row.startDate)}</td>
+                    <td>
+                      {formatDate(row.startDate)}
+                      <div className="muted">Year {row.programYear}</div>
+                    </td>
                     <td className={lastVisit ? undefined : 'muted'}>
                       {lastVisit ? (
                         <>

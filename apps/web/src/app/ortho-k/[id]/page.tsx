@@ -154,7 +154,8 @@ export default function OrthoKDetailPage() {
       <BackButton fallbackHref="/ortho-k" />
       <h1>
         Ortho-K — {patient.lastName}, {patient.firstName}{' '}
-        <span className="badge">{statusLabel(enrollment.status)}</span>
+        <span className="badge">{statusLabel(enrollment.status)}</span>{' '}
+        <span className="badge">Year {enrollment.programYear}</span>
       </h1>
       <p className="muted">
         <Link href={`/patients/${patient.id}`}>Open patient chart</Link> · {patient.mrn}

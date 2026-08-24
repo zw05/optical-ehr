@@ -14,6 +14,7 @@ import * as bcrypt from 'bcryptjs';
 import {
   addDays,
   MILESTONE_LABELS,
+  startOfDay,
   MILESTONE_SCHEDULE,
   milestoneStates,
   type ScheduledMilestone,
@@ -193,6 +194,8 @@ async function seedOrthoK(practice: Practice) {
     startedDaysAgo: number | null;
     logged: ScheduledMilestone[];
     interimDaysIn?: number;
+    /** Recurring checks and lens renewals, which repeat and so are listed explicitly. */
+    extraVisits?: { milestone: OrthoKMilestone; daysIn: number }[];
     status: OrthoKStatus;
     lensBrand: string;
     lensDesign: string;
@@ -257,7 +260,7 @@ async function seedOrthoK(practice: Practice) {
       lastName: 'Whitfield',
       dateOfBirth: '2009-07-08',
       phone: '(555) 010-2204',
-      startedDaysAgo: 230,
+      startedDaysAgo: 1180,
       logged: [
         OrthoKMilestone.DAY_1,
         OrthoKMilestone.DAY_2,
@@ -266,6 +269,16 @@ async function seedOrthoK(practice: Practice) {
         OrthoKMilestone.MONTH_3,
         OrthoKMilestone.MONTH_6,
       ],
+      // Three years in: a lens renewal each year, with the six-month checks between.
+      extraVisits: [
+        { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 360 },
+        { milestone: OrthoKMilestone.NEW_LENSES, daysIn: 370 },
+        { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 550 },
+        { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 730 },
+        { milestone: OrthoKMilestone.NEW_LENSES, daysIn: 740 },
+        { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 920 },
+        { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 1100 },
+      ],
       status: OrthoKStatus.MAINTENANCE,
       lensBrand: 'Euclid',
       lensDesign: 'Emerald',
@@ -273,7 +286,10 @@ async function seedOrthoK(practice: Practice) {
     },
   ];
 
-  const today = new Date();
+  // Local midnight, so every seeded date is a clean calendar day. Carrying the
+  // seed run's time of day would let a visit land on the previous day once
+  // stored as UTC, and this whole board is driven by calendar dates.
+  const today = startOfDay(new Date());
 
   for (const row of enrollments) {
     const existing = await prisma.patient.findFirst({
@@ -312,6 +328,10 @@ async function seedOrthoK(practice: Practice) {
                 },
               ]
             : []),
+          ...(row.extraVisits ?? []).map((v) => ({
+            milestone: v.milestone,
+            visitDate: addDays(startDate, v.daysIn),
+          })),
         ]
       : [];
 

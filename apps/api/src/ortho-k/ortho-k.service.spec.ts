@@ -245,7 +245,7 @@ describe('OrthoKService.logVisit', () => {
     );
   });
 
-  it('queues the annual review once the sequence is complete', async () => {
+  it('queues the recurring check once the sequence is complete', async () => {
     const { service, prisma } = makeService();
     prisma.orthoKEnrollment.findFirst.mockResolvedValue(
       enrollment({ visits: NUMBERED_VISITS.slice(0, 5) }),
@@ -257,7 +257,7 @@ describe('OrthoKService.logVisit', () => {
       milestone: OrthoKMilestone.MONTH_6,
       visitDate: new Date().toISOString(),
     });
-    expect(seededReasons(prisma)).toEqual(['Ortho-K — Annual review follow-up']);
+    expect(seededReasons(prisma)).toEqual(['Ortho-K — 6-month check follow-up']);
   });
 });
 

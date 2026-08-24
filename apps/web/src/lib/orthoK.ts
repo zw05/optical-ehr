@@ -15,8 +15,9 @@ export const ORTHO_K_MILESTONES = [
   'MONTH_1',
   'MONTH_3',
   'MONTH_6',
-  'ANNUAL',
+  'SEMIANNUAL',
   'INTERIM',
+  'NEW_LENSES',
 ] as const;
 
 export type OrthoKMilestone = (typeof ORTHO_K_MILESTONES)[number];
@@ -29,8 +30,9 @@ export const LOGGABLE_MILESTONES: OrthoKMilestone[] = [
   'MONTH_1',
   'MONTH_3',
   'MONTH_6',
-  'ANNUAL',
+  'SEMIANNUAL',
   'INTERIM',
+  'NEW_LENSES',
 ];
 
 export const MILESTONE_LABELS: Record<OrthoKMilestone, string> = {
@@ -40,8 +42,9 @@ export const MILESTONE_LABELS: Record<OrthoKMilestone, string> = {
   MONTH_1: '1 month',
   MONTH_3: '3 months',
   MONTH_6: '6 months',
-  ANNUAL: 'Annual review',
+  SEMIANNUAL: '6-month check',
   INTERIM: 'Interim visit',
+  NEW_LENSES: 'New lenses',
 };
 
 /** Chip captions on the milestone strip. */
@@ -52,8 +55,9 @@ export const MILESTONE_SHORT_LABELS: Record<OrthoKMilestone, string> = {
   MONTH_1: '1mo',
   MONTH_3: '3mo',
   MONTH_6: '6mo',
-  ANNUAL: '1yr',
+  SEMIANNUAL: '+6mo',
   INTERIM: '+',
+  NEW_LENSES: 'Rx',
 };
 
 export type MilestoneState = 'DONE' | 'UPCOMING' | 'DUE' | 'OVERDUE';
@@ -113,6 +117,8 @@ export interface OrthoKEnrollment {
   visits: OrthoKVisit[];
   milestones: MilestoneStatus[];
   next: MilestoneStatus | null;
+  /** Which year of lenses the patient is on; 1 until the first renewal is logged. */
+  programYear: number;
 }
 
 export interface OrthoKNotifications {
