@@ -67,12 +67,6 @@ model OrthoKEnrollment {
   /// so the sequence does not start until it is set.
   startDate   DateTime?
 
-  eyes        String?      // OD | OS | OU
-  lensBrand   String?
-  lensDesign  String?
-  /// Free-text parameters copied off the paper folder (BC/OZ/power per eye).
-  lensParams  String?
-
   notes       String?
   startedById String?
   createdAt   DateTime     @default(now())
@@ -163,7 +157,7 @@ New module registered in `app.module.ts` alongside `RecallsModule`.
 | `enroll(practiceId, dto)` | Creates the enrollment, adds `ORTHO_K` to `Patient.tags` if absent, and seeds recalls for the sequence. Rejects a second non-terminal enrollment for the same patient. |
 | `board(practiceId, filters)` | The dashboard query: every non-discontinued enrollment with its patient, visits, and derived next-milestone/state. Filters: `status`, `state` (`overdue`/`due`/`upcoming`), free-text patient search. |
 | `get(practiceId, id)` | One enrollment with its full visit history, newest first. |
-| `update(practiceId, id, dto)` | Edits lens params, eyes, notes, status. Setting `startDate` for the first time (re)seeds the recall sequence. |
+| `update(practiceId, id, dto)` | Edits the number, notes, and status. Setting `startDate` for the first time (re)seeds the recall sequence. |
 | `logVisit(practiceId, id, dto)` | Records a visit date + milestone + note; closes the matching `Recall`, schedules the next one, and advances `status` when `MONTH_6` lands. |
 | `deleteVisit(practiceId, id, visitId)` | Mistyped-date correction. Re-opens the milestone's recall. |
 | `notifications(practiceId)` | Counts + top rows for `OVERDUE` and `DUE` milestones — feeds the nav badge and the dashboard panel. |
@@ -210,11 +204,11 @@ Page layout:
    search box.
 3. **Program board** — one row per enrollment:
 
-   | Case | Patient | Started (+ year) | Last visit | Next due |
-   | ---- | ------- | ---------------- | ---------- | -------- |
+   | Number | Patient | Started (+ year) | Last visit | Next due |
+   | ------ | ------- | ---------------- | ---------- | -------- |
 
-   **Case** is the practice's own Ortho-K numbering, counting from 1 and separate
-   from the chart MRN, so the program can be filed the way the practice already
+   **Number** is the practice's own Ortho-K numbering, counting from 1 and
+   separate from the chart MRN, so the program can be filed the way the practice already
    files it. It is assigned on enrollment and editable; reusing a number in use
    is refused and names who holds it. **Next due** is written as a month and year
    (`Dec 2026`) with the milestone beneath, since a check is booked to a month
@@ -240,9 +234,11 @@ Page layout:
    previous one: the day the patient collects the next pair is day one of that
    year.
 
-**Enroll a patient** — an inline form on the board (patient search → start date,
-eyes, lens brand/design/params), matching how "New patient" already works in the
-patient directory.
+**Enroll a patient** — an inline form on the board (patient search → number,
+start date, notes), matching how "New patient" already works in the patient
+directory. No lens details are captured anywhere in the program: the enrollment
+tracks follow-ups, and everything about the lenses themselves stays on the paper
+chart.
 
 Supporting files: `apps/web/src/lib/orthoK.ts` (milestone table, labels, state
 derivation) and `apps/web/src/components/orthok/MilestoneStrip.tsx`.
@@ -327,7 +323,5 @@ against real seeded data from step 4 onward.
 
 - **Annual reviews** — recur indefinitely, or stop after the first year and rely on
   the ordinary annual-exam recall? Plan assumes indefinite yearly recurrence.
-- **Overnight vs daytime wear** — a field on the enrollment, or out of scope?
-  Currently folded into free-text `lensParams`.
 - **Fitting fees** — should enrolling a patient also draft the `FITTING_ORTHO_K`
   fee/order, or is that kept manual in the Orders tab? Plan keeps it manual.

@@ -44,13 +44,9 @@ export default function OrthoKDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
-    caseNumber: '',
+    number: '',
     startDate: '',
     status: '' as '' | OrthoKStatus,
-    eyes: '',
-    lensBrand: '',
-    lensDesign: '',
-    lensParams: '',
     notes: '',
   });
 
@@ -61,13 +57,9 @@ export default function OrthoKDetailPage() {
       // Default the picker to whatever check is owed next; staff can override.
       setMilestone((current) => current || (row.next?.milestone ?? 'INTERIM'));
       setForm({
-        caseNumber: String(row.caseNumber),
+        number: String(row.number),
         startDate: row.startDate ? row.startDate.slice(0, 10) : '',
         status: row.status,
-        eyes: row.eyes ?? '',
-        lensBrand: row.lensBrand ?? '',
-        lensDesign: row.lensDesign ?? '',
-        lensParams: row.lensParams ?? '',
         notes: row.notes ?? '',
       });
     } catch (err) {
@@ -114,13 +106,9 @@ export default function OrthoKDetailPage() {
       await api(`/ortho-k/${enrollmentId}`, {
         method: 'PATCH',
         body: {
-          caseNumber: form.caseNumber ? Number(form.caseNumber) : undefined,
+          number: form.number ? Number(form.number) : undefined,
           startDate: form.startDate || undefined,
           status: form.status || undefined,
-          eyes: form.eyes || undefined,
-          lensBrand: form.lensBrand,
-          lensDesign: form.lensDesign,
-          lensParams: form.lensParams,
           notes: form.notes,
         },
       });
@@ -170,7 +158,7 @@ export default function OrthoKDetailPage() {
     <AppShell>
       <BackButton fallbackHref="/ortho-k" />
       <h1>
-        Ortho-K {enrollment.caseNumber} — {patient.lastName}, {patient.firstName}{' '}
+        Ortho-K {enrollment.number} — {patient.lastName}, {patient.firstName}{' '}
         <span className="badge">{statusLabel(enrollment.status)}</span>{' '}
         <span className="badge">Year {enrollment.programYear}</span>
       </h1>
@@ -253,12 +241,12 @@ export default function OrthoKDetailPage() {
           <form onSubmit={saveDetails}>
             <div className="ok-enroll-grid">
               <label>
-                Case number
+                Number
                 <input
                   type="number"
                   min={1}
-                  value={form.caseNumber}
-                  onChange={(e) => setForm((f) => ({ ...f, caseNumber: e.target.value }))}
+                  value={form.number}
+                  onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))}
                 />
               </label>
               <label>
@@ -283,38 +271,6 @@ export default function OrthoKDetailPage() {
                   ))}
                 </select>
               </label>
-              <label>
-                Eyes
-                <select
-                  value={form.eyes}
-                  onChange={(e) => setForm((f) => ({ ...f, eyes: e.target.value }))}
-                >
-                  <option value="OU">Both (OU)</option>
-                  <option value="OD">Right (OD)</option>
-                  <option value="OS">Left (OS)</option>
-                </select>
-              </label>
-              <label>
-                Lens brand
-                <input
-                  value={form.lensBrand}
-                  onChange={(e) => setForm((f) => ({ ...f, lensBrand: e.target.value }))}
-                />
-              </label>
-              <label>
-                Lens design
-                <input
-                  value={form.lensDesign}
-                  onChange={(e) => setForm((f) => ({ ...f, lensDesign: e.target.value }))}
-                />
-              </label>
-              <label className="ok-enroll-wide">
-                Lens parameters
-                <input
-                  value={form.lensParams}
-                  onChange={(e) => setForm((f) => ({ ...f, lensParams: e.target.value }))}
-                />
-              </label>
               <label className="ok-enroll-wide">
                 Notes
                 <input
@@ -328,29 +284,13 @@ export default function OrthoKDetailPage() {
         ) : (
           <dl className="detail-list">
             <div className="detail-row">
-              <dt>Case number</dt>
-              <dd>{enrollment.caseNumber}</dd>
+              <dt>Number</dt>
+              <dd>{enrollment.number}</dd>
             </div>
             <div className="detail-row">
               <dt>First night of wear</dt>
               <dd className={enrollment.startDate ? undefined : 'empty'}>
                 {formatDate(enrollment.startDate)}
-              </dd>
-            </div>
-            <div className="detail-row">
-              <dt>Eyes</dt>
-              <dd className={enrollment.eyes ? undefined : 'empty'}>{enrollment.eyes ?? '—'}</dd>
-            </div>
-            <div className="detail-row">
-              <dt>Lens</dt>
-              <dd className={enrollment.lensBrand ? undefined : 'empty'}>
-                {[enrollment.lensBrand, enrollment.lensDesign].filter(Boolean).join(' ') || '—'}
-              </dd>
-            </div>
-            <div className="detail-row">
-              <dt>Parameters</dt>
-              <dd className={enrollment.lensParams ? undefined : 'empty'}>
-                {enrollment.lensParams ?? '—'}
               </dd>
             </div>
             <div className="detail-row">

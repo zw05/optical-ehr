@@ -110,22 +110,18 @@ export class OrthoKService {
     }
 
     const startDate = dto.startDate ? parseDateOnly(dto.startDate) : null;
-    const caseNumber = dto.caseNumber ?? (await this.nextCaseNumber(practiceId));
-    await this.assertCaseNumberFree(practiceId, caseNumber);
+    const number = dto.number ?? (await this.nextCaseNumber(practiceId));
+    await this.assertCaseNumberFree(practiceId, number);
 
     return this.prisma.$transaction(async (tx) => {
       const enrollment = await tx.orthoKEnrollment.create({
         data: {
           practiceId,
           patientId: dto.patientId,
-          caseNumber,
+          number,
           startedById: actorId,
           startDate,
           status: startDate ? OrthoKStatus.ACTIVE : OrthoKStatus.FITTING,
-          eyes: dto.eyes,
-          lensBrand: dto.lensBrand,
-          lensDesign: dto.lensDesign,
-          lensParams: dto.lensParams,
           notes: dto.notes,
         },
         include: ENROLLMENT_INCLUDE,
@@ -189,7 +185,7 @@ export class OrthoKService {
   }
 
   /**
-   * Edits the lens details, notes, status, or start date.
+   * Edits the number, notes, status, or start date.
    * Changing the start date re-dates the whole sequence, so the queued recalls
    * are rebuilt to match.
    */
@@ -200,8 +196,8 @@ export class OrthoKService {
     });
     if (!existing) throw new NotFoundException('Ortho-K enrollment not found');
 
-    if (dto.caseNumber !== undefined) {
-      await this.assertCaseNumberFree(practiceId, dto.caseNumber, id);
+    if (dto.number !== undefined) {
+      await this.assertCaseNumberFree(practiceId, dto.number, id);
     }
 
     const startDate = dto.startDate !== undefined ? parseDateOnly(dto.startDate) : undefined;
@@ -218,13 +214,9 @@ export class OrthoKService {
       const updated = await tx.orthoKEnrollment.update({
         where: { id },
         data: {
-          ...(dto.caseNumber !== undefined ? { caseNumber: dto.caseNumber } : {}),
+          ...(dto.number !== undefined ? { number: dto.number } : {}),
           ...(startDate !== undefined ? { startDate } : {}),
           ...(status ? { status } : {}),
-          ...(dto.eyes !== undefined ? { eyes: dto.eyes } : {}),
-          ...(dto.lensBrand !== undefined ? { lensBrand: dto.lensBrand } : {}),
-          ...(dto.lensDesign !== undefined ? { lensDesign: dto.lensDesign } : {}),
-          ...(dto.lensParams !== undefined ? { lensParams: dto.lensParams } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         },
         include: ENROLLMENT_INCLUDE,
@@ -343,24 +335,24 @@ export class OrthoKService {
   private async nextCaseNumber(practiceId: string): Promise<number> {
     const highest = await this.prisma.orthoKEnrollment.findFirst({
       where: { practiceId },
-      orderBy: { caseNumber: 'desc' },
-      select: { caseNumber: true },
+      orderBy: { number: 'desc' },
+      select: { number: true },
     });
-    return (highest?.caseNumber ?? 0) + 1;
+    return (highest?.number ?? 0) + 1;
   }
 
   /**
    * Case numbers are the practice's own filing sequence, so a clash is a data
    * entry mistake worth reporting plainly rather than a constraint violation.
    */
-  private async assertCaseNumberFree(practiceId: string, caseNumber: number, exceptId?: string) {
+  private async assertCaseNumberFree(practiceId: string, number: number, exceptId?: string) {
     const clash = await this.prisma.orthoKEnrollment.findFirst({
-      where: { practiceId, caseNumber, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+      where: { practiceId, number, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
       select: { patient: { select: { firstName: true, lastName: true } } },
     });
     if (clash) {
       throw new BadRequestException(
-        `Ortho-K case ${caseNumber} is already used by ${clash.patient.lastName}, ${clash.patient.firstName}`,
+        `Ortho-K number ${number} is already used by ${clash.patient.lastName}, ${clash.patient.firstName}`,
       );
     }
   }

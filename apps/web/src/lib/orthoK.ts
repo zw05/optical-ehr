@@ -99,14 +99,10 @@ export interface OrthoKVisit {
 
 export interface OrthoKEnrollment {
   id: string;
-  /** The practice's own Ortho-K case number, counting from 1. */
-  caseNumber: number;
+  /** The practice's own Ortho-K number, counting from 1. */
+  number: number;
   status: OrthoKStatus;
   startDate: string | null;
-  eyes: string | null;
-  lensBrand: string | null;
-  lensDesign: string | null;
-  lensParams: string | null;
   notes: string | null;
   patient: {
     id: string;

@@ -29,12 +29,8 @@ import {
 const EMPTY_ENROLL = {
   patientId: '',
   patientLabel: '',
-  caseNumber: '',
+  number: '',
   startDate: '',
-  eyes: 'OU',
-  lensBrand: '',
-  lensDesign: '',
-  lensParams: '',
   notes: '',
 };
 
@@ -73,7 +69,7 @@ function NeedsAttention({
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
-              <td className="ok-case">{row.caseNumber}</td>
+              <td className="ok-case">{row.number}</td>
               <td>
                 <Link href={`/ortho-k/${row.id}`}>
                   {row.patient.lastName}, {row.patient.firstName}
@@ -146,12 +142,8 @@ export default function OrthoKPage() {
         method: 'POST',
         body: {
           patientId: enroll.patientId,
-          caseNumber: enroll.caseNumber ? Number(enroll.caseNumber) : undefined,
+          number: enroll.number ? Number(enroll.number) : undefined,
           startDate: enroll.startDate || undefined,
-          eyes: enroll.eyes || undefined,
-          lensBrand: enroll.lensBrand || undefined,
-          lensDesign: enroll.lensDesign || undefined,
-          lensParams: enroll.lensParams || undefined,
           notes: enroll.notes || undefined,
         },
       });
@@ -264,13 +256,13 @@ export default function OrthoKPage() {
               )}
             </label>
             <label>
-              Case number
+              Number
               <input
                 type="number"
                 min={1}
-                value={enroll.caseNumber}
+                value={enroll.number}
                 placeholder="Next free number"
-                onChange={(e) => setEnroll((f) => ({ ...f, caseNumber: e.target.value }))}
+                onChange={(e) => setEnroll((f) => ({ ...f, number: e.target.value }))}
               />
             </label>
             <label>
@@ -281,39 +273,6 @@ export default function OrthoKPage() {
                 onChange={(e) => setEnroll((f) => ({ ...f, startDate: e.target.value }))}
               />
               <span className="ok-hint">Leave blank while lenses are on order.</span>
-            </label>
-            <label>
-              Eyes
-              <select
-                value={enroll.eyes}
-                onChange={(e) => setEnroll((f) => ({ ...f, eyes: e.target.value }))}
-              >
-                <option value="OU">Both (OU)</option>
-                <option value="OD">Right (OD)</option>
-                <option value="OS">Left (OS)</option>
-              </select>
-            </label>
-            <label>
-              Lens brand
-              <input
-                value={enroll.lensBrand}
-                onChange={(e) => setEnroll((f) => ({ ...f, lensBrand: e.target.value }))}
-              />
-            </label>
-            <label>
-              Lens design
-              <input
-                value={enroll.lensDesign}
-                onChange={(e) => setEnroll((f) => ({ ...f, lensDesign: e.target.value }))}
-              />
-            </label>
-            <label className="ok-enroll-wide">
-              Lens parameters
-              <input
-                value={enroll.lensParams}
-                placeholder="OD 8.6 / -2.75 / 33.0   OS 8.7 / -2.50 / 33.0"
-                onChange={(e) => setEnroll((f) => ({ ...f, lensParams: e.target.value }))}
-              />
             </label>
             <label className="ok-enroll-wide">
               Notes
@@ -365,7 +324,7 @@ export default function OrthoKPage() {
           <table className="ok-table">
             <thead>
               <tr>
-                <th>Case</th>
+                <th>Number</th>
                 <th>Patient</th>
                 <th>Started</th>
                 <th>Last visit</th>
@@ -379,7 +338,7 @@ export default function OrthoKPage() {
                 const lastVisit = row.visits[0];
                 return (
                   <tr key={row.id}>
-                    <td className="ok-case">{row.caseNumber}</td>
+                    <td className="ok-case">{row.number}</td>
                     <td>
                       <Link href={`/ortho-k/${row.id}`}>
                         {row.patient.lastName}, {row.patient.firstName}

@@ -26,7 +26,7 @@ function enrollment(overrides: Record<string, unknown> = {}) {
     id: 'enr-1',
     practiceId: PRACTICE,
     patientId: 'pat-1',
-    caseNumber: 1,
+    number: 1,
     status: OrthoKStatus.ACTIVE,
     startDate: START,
     patient: { id: 'pat-1', mrn: 'P1', firstName: 'Ada', lastName: 'Lovelace' },
@@ -127,32 +127,32 @@ describe('OrthoKService.enroll', () => {
   it('numbers the first enrollment 1 and each later one after the highest', async () => {
     const { service, prisma } = makeService();
     await service.enroll(PRACTICE, ACTOR, { patientId: 'pat-1' });
-    expect(prisma.orthoKEnrollment.create.mock.calls[0][0].data.caseNumber).toBe(1);
+    expect(prisma.orthoKEnrollment.create.mock.calls[0][0].data.number).toBe(1);
 
     // findFirst backs the live-enrollment check, the highest-number lookup, and
     // the clash check in turn: no live enrollment, highest is 7, number free.
     prisma.orthoKEnrollment.findFirst
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ caseNumber: 7 })
+      .mockResolvedValueOnce({ number: 7 })
       .mockResolvedValueOnce(null);
     await service.enroll(PRACTICE, ACTOR, { patientId: 'pat-2' });
-    expect(prisma.orthoKEnrollment.create.mock.calls[1][0].data.caseNumber).toBe(8);
+    expect(prisma.orthoKEnrollment.create.mock.calls[1][0].data.number).toBe(8);
   });
 
-  it('accepts a case number typed in from an existing paper sequence', async () => {
+  it('accepts a number typed in from an existing paper sequence', async () => {
     const { service, prisma } = makeService();
-    await service.enroll(PRACTICE, ACTOR, { patientId: 'pat-1', caseNumber: 42 });
-    expect(prisma.orthoKEnrollment.create.mock.calls[0][0].data.caseNumber).toBe(42);
+    await service.enroll(PRACTICE, ACTOR, { patientId: 'pat-1', number: 42 });
+    expect(prisma.orthoKEnrollment.create.mock.calls[0][0].data.number).toBe(42);
   });
 
-  it('refuses a case number already in use, naming who holds it', async () => {
+  it('refuses a number already in use, naming who holds it', async () => {
     const { service, prisma } = makeService();
     prisma.orthoKEnrollment.findFirst
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ patient: { firstName: 'Ada', lastName: 'Lovelace' } });
     await expect(
-      service.enroll(PRACTICE, ACTOR, { patientId: 'pat-2', caseNumber: 3 }),
-    ).rejects.toThrow(/case 3 is already used by Lovelace, Ada/);
+      service.enroll(PRACTICE, ACTOR, { patientId: 'pat-2', number: 3 }),
+    ).rejects.toThrow(/number 3 is already used by Lovelace, Ada/);
   });
 
   it('queues a recall for every outstanding follow-up', async () => {
@@ -363,21 +363,21 @@ describe('OrthoKService.update', () => {
     expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.status).toBeUndefined();
   });
 
-  it('lets a case number be reassigned when it is free', async () => {
+  it('lets a number be reassigned when it is free', async () => {
     const { service, prisma } = makeService();
     prisma.orthoKEnrollment.findFirst
       .mockResolvedValueOnce({ id: 'enr-1', startDate: START, status: OrthoKStatus.ACTIVE })
       .mockResolvedValueOnce(null);
-    await service.update(PRACTICE, 'enr-1', { caseNumber: 12 });
-    expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.caseNumber).toBe(12);
+    await service.update(PRACTICE, 'enr-1', { number: 12 });
+    expect(prisma.orthoKEnrollment.update.mock.calls[0][0].data.number).toBe(12);
   });
 
-  it('refuses to move a case number onto one another patient holds', async () => {
+  it('refuses to move a number onto one another patient holds', async () => {
     const { service, prisma } = makeService();
     prisma.orthoKEnrollment.findFirst
       .mockResolvedValueOnce({ id: 'enr-1', startDate: START, status: OrthoKStatus.ACTIVE })
       .mockResolvedValueOnce({ patient: { firstName: 'Ada', lastName: 'Lovelace' } });
-    await expect(service.update(PRACTICE, 'enr-1', { caseNumber: 3 })).rejects.toThrow(
+    await expect(service.update(PRACTICE, 'enr-1', { number: 3 })).rejects.toThrow(
       /already used by/,
     );
   });

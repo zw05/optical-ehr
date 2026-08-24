@@ -869,7 +869,8 @@ enum OrthoKStatus {
 /// first one, so the original follow-up sequence stays intact.
 ///
 /// Ortho-K exams stay in the physical folder: this model records *when* each
-/// follow-up happened and what is due next, never the clinical findings.
+/// follow-up happened and what is due next — never the clinical findings, and
+/// never the lens details, which live on the paper chart.
 model OrthoKEnrollment {
   id         String       @id @default(uuid())
   practiceId String
@@ -878,21 +879,14 @@ model OrthoKEnrollment {
   patient    Patient      @relation(fields: [patientId], references: [id])
   status     OrthoKStatus @default(FITTING)
 
-  /// The practice's own Ortho-K case number, counting from 1 and independent of
-  /// the chart MRN. Assigned on enrollment and editable, so a practice already
+  /// The practice's own Ortho-K number, counting from 1 and independent of the
+  /// chart MRN. Assigned on enrollment and editable, so a practice already
   /// running the program on paper can key its existing numbering straight in.
-  caseNumber Int
+  number     Int
 
   /// First night of lens wear. Every milestone due date is derived from this, so
   /// the sequence does not start until it is set.
   startDate DateTime?
-
-  eyes       String? // OD | OS | OU
-  lensBrand  String?
-  lensDesign String?
-  /// Parameters copied off the paper folder (BC/OZ/power per eye), free text
-  /// because the fitting set differs by lens design.
-  lensParams String?
 
   notes       String?
   startedById String?
@@ -902,7 +896,7 @@ model OrthoKEnrollment {
 
   visits OrthoKVisit[]
 
-  @@unique([practiceId, caseNumber])
+  @@unique([practiceId, number])
   @@index([practiceId, status])
   @@index([patientId])
 }

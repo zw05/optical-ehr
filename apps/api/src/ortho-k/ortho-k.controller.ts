@@ -48,7 +48,7 @@ export class OrthoKController {
     return this.orthoK.enroll(user.practiceId, user.sub, dto);
   }
 
-  /** PATCH /api/ortho-k/:id — edit lens details, status, or start date. */
+  /** PATCH /api/ortho-k/:id — edit the number, notes, status, or start date. */
   @Patch(':id')
   @Roles(Role.TECHNICIAN, Role.DOCTOR, Role.OPTICIAN)
   update(

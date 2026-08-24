@@ -1,7 +1,6 @@
 import {
   IsDateString,
   IsEnum,
-  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -14,11 +13,11 @@ export class EnrollOrthoKDto {
   @IsUUID()
   patientId!: string;
 
-  /** Ortho-K case number. Left out, the next free number for the practice is used. */
+  /** Ortho-K number. Left out, the next free number for the practice is used. */
   @IsOptional()
   @IsInt()
   @Min(1)
-  caseNumber?: number;
+  number?: number;
 
   /**
    * First night of lens wear. Optional: a patient can be enrolled while the
@@ -28,21 +27,9 @@ export class EnrollOrthoKDto {
   @IsDateString()
   startDate?: string;
 
-  @IsOptional()
-  @IsIn(['OD', 'OS', 'OU'])
-  eyes?: string;
 
-  @IsOptional()
-  @IsString()
-  lensBrand?: string;
 
-  @IsOptional()
-  @IsString()
-  lensDesign?: string;
 
-  @IsOptional()
-  @IsString()
-  lensParams?: string;
 
   @IsOptional()
   @IsString()
@@ -53,7 +40,7 @@ export class UpdateOrthoKDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  caseNumber?: number;
+  number?: number;
 
   @IsOptional()
   @IsDateString()
@@ -63,21 +50,9 @@ export class UpdateOrthoKDto {
   @IsEnum(OrthoKStatus)
   status?: OrthoKStatus;
 
-  @IsOptional()
-  @IsIn(['OD', 'OS', 'OU'])
-  eyes?: string;
 
-  @IsOptional()
-  @IsString()
-  lensBrand?: string;
 
-  @IsOptional()
-  @IsString()
-  lensDesign?: string;
 
-  @IsOptional()
-  @IsString()
-  lensParams?: string;
 
   @IsOptional()
   @IsString()

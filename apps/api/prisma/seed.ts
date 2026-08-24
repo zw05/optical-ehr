@@ -197,9 +197,6 @@ async function seedOrthoK(practice: Practice) {
     /** Recurring checks and lens renewals, which repeat and so are listed explicitly. */
     extraVisits?: { milestone: OrthoKMilestone; daysIn: number }[];
     status: OrthoKStatus;
-    lensBrand: string;
-    lensDesign: string;
-    lensParams: string;
     notes?: string;
   }[] = [
     {
@@ -212,9 +209,6 @@ async function seedOrthoK(practice: Practice) {
       startedDaysAgo: null,
       logged: [],
       status: OrthoKStatus.FITTING,
-      lensBrand: 'Paragon',
-      lensDesign: 'CRT Dual Axis',
-      lensParams: 'OD 8.6 / -2.75 / 33.0   OS 8.7 / -2.50 / 33.0',
       notes: 'Lenses ordered; dispense visit booked.',
     },
     {
@@ -233,9 +227,6 @@ async function seedOrthoK(practice: Practice) {
       ],
       interimDaysIn: 12,
       status: OrthoKStatus.ACTIVE,
-      lensBrand: 'Euclid',
-      lensDesign: 'Emerald',
-      lensParams: 'OD 8.8 / -3.25 / 10.6   OS 8.8 / -3.00 / 10.6',
       notes: 'Interim visit at two weeks for lens handling.',
     },
     {
@@ -248,9 +239,6 @@ async function seedOrthoK(practice: Practice) {
       startedDaysAgo: 24,
       logged: [OrthoKMilestone.DAY_1, OrthoKMilestone.DAY_2],
       status: OrthoKStatus.ACTIVE,
-      lensBrand: 'Paragon',
-      lensDesign: 'CRT',
-      lensParams: 'OD 8.9 / -1.75 / 33.0   OS 8.9 / -1.75 / 33.0',
       notes: 'Parent rescheduled twice; phone is the best contact.',
     },
     {
@@ -280,9 +268,6 @@ async function seedOrthoK(practice: Practice) {
         { milestone: OrthoKMilestone.SEMIANNUAL, daysIn: 1100 },
       ],
       status: OrthoKStatus.MAINTENANCE,
-      lensBrand: 'Euclid',
-      lensDesign: 'Emerald',
-      lensParams: 'OD 8.7 / -4.00 / 10.6   OS 8.6 / -4.25 / 10.6',
     },
   ];
 
@@ -339,13 +324,9 @@ async function seedOrthoK(practice: Practice) {
       data: {
         practiceId: practice.id,
         patientId: patient.id,
-        caseNumber: index + 1,
+        number: index + 1,
         status: row.status,
         startDate,
-        eyes: 'OU',
-        lensBrand: row.lensBrand,
-        lensDesign: row.lensDesign,
-        lensParams: row.lensParams,
         notes: row.notes,
         visits: { create: visits },
       },
