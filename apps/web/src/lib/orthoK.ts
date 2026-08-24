@@ -172,3 +172,54 @@ export function todayInputValue(): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
 }
+
+/** One year of the program: the lenses dispensed, and the follow-ups that ran on them. */
+export interface ProgramYear {
+  year: number;
+  /** When this year's lenses were dispensed — the enrollment start for year 1. */
+  startedAt: string | null;
+  /** Visits belonging to this year, newest first. */
+  visits: OrthoKVisit[];
+  /** The year the patient is in now, and the only one still accruing visits. */
+  isCurrent: boolean;
+}
+
+/**
+ * Splits the visit log into program years, one per set of lenses.
+ *
+ * A `NEW_LENSES` visit opens the year it belongs to rather than closing the
+ * previous one: the day the patient collects their next pair is day one of that
+ * year, and every follow-up after it belongs there too.
+ */
+export function groupVisitsByYear(
+  visits: OrthoKVisit[],
+  startDate: string | null,
+): ProgramYear[] {
+  const ascending = [...visits].sort(
+    (a, b) => new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime(),
+  );
+
+  const years: ProgramYear[] = [
+    { year: 1, startedAt: startDate, visits: [], isCurrent: true },
+  ];
+
+  for (const visit of ascending) {
+    if (visit.milestone === 'NEW_LENSES') {
+      years.push({
+        year: years.length + 1,
+        startedAt: visit.visitDate,
+        visits: [],
+        isCurrent: true,
+      });
+    }
+    years[years.length - 1].visits.push(visit);
+  }
+
+  return years
+    .map((y, index) => ({
+      ...y,
+      visits: [...y.visits].reverse(),
+      isCurrent: index === years.length - 1,
+    }))
+    .reverse();
+}

@@ -53,10 +53,9 @@ export default function MilestoneStrip({
           className={`ok-chip ok-chip-${status.state.toLowerCase()}`}
           title={chipTitle(status)}
         >
-          <span className="ok-chip-label">
-            {MILESTONE_SHORT_LABELS[status.milestone]}
-            {status.milestone === 'SEMIANNUAL' && status.occurrence > 1 ? ` ×${status.occurrence}` : ''}
-          </span>
+          {/* No occurrence suffix: the strip covers a single program year, and each
+              chip carries its own date, so a running total would only mislead. */}
+          <span className="ok-chip-label">{MILESTONE_SHORT_LABELS[status.milestone]}</span>
           {size === 'full' && (
             <span className="ok-chip-date">
               {status.state === 'DONE' ? formatDate(status.visitDate) : formatDate(status.dueDate)}

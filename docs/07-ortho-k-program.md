@@ -219,11 +219,18 @@ Page layout:
    6mo · 1yr` — filled once a visit is logged, open when pending, amber when due,
    red when overdue, with interim visits shown as dots beside the sequence.
 
-4. **Enrollment detail** (`/ortho-k/[id]`) — the milestone strip full-size, the
-   complete visit log (date, milestone, note, who recorded it), an inline
-   **Log a follow-up** form (date picker defaulting to today, milestone select
-   defaulting to the next open milestone, note), lens parameters, status
-   control, and a link through to the patient chart.
+4. **Enrollment detail** (`/ortho-k/[id]`) — the milestone strip full-size for the
+   **year in progress only**, so it stays readable however many years of
+   six-month checks are behind the patient; an inline **Log a follow-up** form
+   (date picker defaulting to today, milestone select defaulting to the next open
+   milestone, note); lens parameters; status control; and a link to the chart.
+
+   The visit log is grouped into **program years**, one collapsible block per set
+   of lenses — `Year 3` open, `Year 2` and `Year 1` folded beneath it, each
+   showing when that year's lenses were dispensed and how many visits it holds.
+   A `NEW_LENSES` visit opens the year it belongs to rather than closing the
+   previous one: the day the patient collects the next pair is day one of that
+   year.
 
 **Enroll a patient** — an inline form on the board (patient search → start date,
 eyes, lens brand/design/params), matching how "New patient" already works in the

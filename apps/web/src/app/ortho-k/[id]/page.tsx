@@ -17,6 +17,7 @@ import { api, getSessionUser } from '@/lib/api';
 import {
   describeDue,
   formatDate,
+  groupVisitsByYear,
   LOGGABLE_MILESTONES,
   milestoneLabel,
   ORTHO_K_STATUSES,
@@ -149,6 +150,19 @@ export default function OrthoKDetailPage() {
   const canDelete = MAY_DELETE_VISIT.has(user?.role ?? '');
   const overdue = enrollment.next?.state === 'OVERDUE';
 
+  const years = groupVisitsByYear(enrollment.visits, enrollment.startDate);
+  const currentYear = years[0];
+
+  // The strip shows only the year in progress, so it stays readable however many
+  // years of six-month checks are behind the patient. Earlier years are in the
+  // per-year sections below. Outstanding checks always belong to the current year.
+  const currentYearStart = currentYear?.startedAt ? new Date(currentYear.startedAt) : null;
+  const currentYearMilestones = enrollment.milestones.filter((m) => {
+    if (!m.visitDate) return true;
+    if (!currentYearStart) return true;
+    return new Date(m.visitDate) >= currentYearStart;
+  });
+
   return (
     <AppShell>
       <BackButton fallbackHref="/ortho-k" />
@@ -165,10 +179,15 @@ export default function OrthoKDetailPage() {
       {error && <p className="error-text">{error}</p>}
 
       <section className="card">
-        <h2 className="ok-section-title">Follow-up sequence</h2>
+        <h2 className="ok-section-title">
+          Follow-up sequence
+          {enrollment.programYear > 1 && (
+            <span className="muted ok-section-note">Year {enrollment.programYear}</span>
+          )}
+        </h2>
         <MilestoneStrip
-          milestones={enrollment.milestones}
-          visits={enrollment.visits}
+          milestones={currentYearMilestones}
+          visits={currentYear?.visits ?? []}
           size="full"
         />
         <p className={`ok-next-line${overdue ? ' ok-overdue-text' : ''}`}>
@@ -335,42 +354,63 @@ export default function OrthoKDetailPage() {
         {enrollment.visits.length === 0 ? (
           <p className="muted">No follow-ups recorded yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Milestone</th>
-                <th>Note</th>
-                <th>Recorded by</th>
-                {canDelete && <th />}
-              </tr>
-            </thead>
-            <tbody>
-              {enrollment.visits.map((visit) => (
-                <tr key={visit.id}>
-                  <td>{formatDate(visit.visitDate)}</td>
-                  <td>{milestoneLabel(visit.milestone)}</td>
-                  <td className={visit.note ? undefined : 'muted'}>{visit.note ?? '—'}</td>
-                  <td className="muted">
-                    {visit.recordedBy
-                      ? `${visit.recordedBy.firstName} ${visit.recordedBy.lastName}`
-                      : '—'}
-                  </td>
-                  {canDelete && (
-                    <td>
-                      <button
-                        type="button"
-                        className="danger ok-inline-button"
-                        onClick={() => void removeVisit(visit.id)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          years.map((programYear) => (
+            <details
+              key={programYear.year}
+              className="ok-year"
+              // The year in progress is what staff came to see; earlier ones stay folded.
+              open={programYear.isCurrent}
+            >
+              <summary className="ok-year-summary">
+                <span className="ok-year-name">Year {programYear.year}</span>
+                <span className="muted">
+                  {programYear.startedAt ? `from ${formatDate(programYear.startedAt)}` : 'not started'}
+                  {' · '}
+                  {programYear.visits.length} visit{programYear.visits.length === 1 ? '' : 's'}
+                </span>
+              </summary>
+              {programYear.visits.length === 0 ? (
+                <p className="muted">No visits recorded in this year yet.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Milestone</th>
+                      <th>Note</th>
+                      <th>Recorded by</th>
+                      {canDelete && <th />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {programYear.visits.map((visit) => (
+                      <tr key={visit.id}>
+                        <td>{formatDate(visit.visitDate)}</td>
+                        <td>{milestoneLabel(visit.milestone)}</td>
+                        <td className={visit.note ? undefined : 'muted'}>{visit.note ?? '—'}</td>
+                        <td className="muted">
+                          {visit.recordedBy
+                            ? `${visit.recordedBy.firstName} ${visit.recordedBy.lastName}`
+                            : '—'}
+                        </td>
+                        {canDelete && (
+                          <td>
+                            <button
+                              type="button"
+                              className="danger ok-inline-button"
+                              onClick={() => void removeVisit(visit.id)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
+          ))
         )}
       </section>
     </AppShell>
