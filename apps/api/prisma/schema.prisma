@@ -878,6 +878,11 @@ model OrthoKEnrollment {
   patient    Patient      @relation(fields: [patientId], references: [id])
   status     OrthoKStatus @default(FITTING)
 
+  /// The practice's own Ortho-K case number, counting from 1 and independent of
+  /// the chart MRN. Assigned on enrollment and editable, so a practice already
+  /// running the program on paper can key its existing numbering straight in.
+  caseNumber Int
+
   /// First night of lens wear. Every milestone due date is derived from this, so
   /// the sequence does not start until it is set.
   startDate DateTime?
@@ -897,6 +902,7 @@ model OrthoKEnrollment {
 
   visits OrthoKVisit[]
 
+  @@unique([practiceId, caseNumber])
   @@index([practiceId, status])
   @@index([patientId])
 }

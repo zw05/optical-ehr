@@ -110,12 +110,15 @@ export class OrthoKService {
     }
 
     const startDate = dto.startDate ? parseDateOnly(dto.startDate) : null;
+    const caseNumber = dto.caseNumber ?? (await this.nextCaseNumber(practiceId));
+    await this.assertCaseNumberFree(practiceId, caseNumber);
 
     return this.prisma.$transaction(async (tx) => {
       const enrollment = await tx.orthoKEnrollment.create({
         data: {
           practiceId,
           patientId: dto.patientId,
+          caseNumber,
           startedById: actorId,
           startDate,
           status: startDate ? OrthoKStatus.ACTIVE : OrthoKStatus.FITTING,
@@ -197,6 +200,10 @@ export class OrthoKService {
     });
     if (!existing) throw new NotFoundException('Ortho-K enrollment not found');
 
+    if (dto.caseNumber !== undefined) {
+      await this.assertCaseNumberFree(practiceId, dto.caseNumber, id);
+    }
+
     const startDate = dto.startDate !== undefined ? parseDateOnly(dto.startDate) : undefined;
 
     // Recording the first night of wear is what moves a fitting into the sequence.
@@ -211,6 +218,7 @@ export class OrthoKService {
       const updated = await tx.orthoKEnrollment.update({
         where: { id },
         data: {
+          ...(dto.caseNumber !== undefined ? { caseNumber: dto.caseNumber } : {}),
           ...(startDate !== undefined ? { startDate } : {}),
           ...(status ? { status } : {}),
           ...(dto.eyes !== undefined ? { eyes: dto.eyes } : {}),
@@ -329,6 +337,32 @@ export class OrthoKService {
       // Most overdue first, so the worst-slipped patient leads the panel.
       rows: [...overdue.sort((a, b) => (b.next?.daysLate ?? 0) - (a.next?.daysLate ?? 0)), ...due],
     };
+  }
+
+  /** The next free case number for the practice; the first enrollment is number 1. */
+  private async nextCaseNumber(practiceId: string): Promise<number> {
+    const highest = await this.prisma.orthoKEnrollment.findFirst({
+      where: { practiceId },
+      orderBy: { caseNumber: 'desc' },
+      select: { caseNumber: true },
+    });
+    return (highest?.caseNumber ?? 0) + 1;
+  }
+
+  /**
+   * Case numbers are the practice's own filing sequence, so a clash is a data
+   * entry mistake worth reporting plainly rather than a constraint violation.
+   */
+  private async assertCaseNumberFree(practiceId: string, caseNumber: number, exceptId?: string) {
+    const clash = await this.prisma.orthoKEnrollment.findFirst({
+      where: { practiceId, caseNumber, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+      select: { patient: { select: { firstName: true, lastName: true } } },
+    });
+    if (clash) {
+      throw new BadRequestException(
+        `Ortho-K case ${caseNumber} is already used by ${clash.patient.lastName}, ${clash.patient.firstName}`,
+      );
+    }
   }
 
   /** Resolves the stored enrollment against today: which checks are done, due, or missed. */

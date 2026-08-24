@@ -44,6 +44,7 @@ export default function OrthoKDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
+    caseNumber: '',
     startDate: '',
     status: '' as '' | OrthoKStatus,
     eyes: '',
@@ -60,6 +61,7 @@ export default function OrthoKDetailPage() {
       // Default the picker to whatever check is owed next; staff can override.
       setMilestone((current) => current || (row.next?.milestone ?? 'INTERIM'));
       setForm({
+        caseNumber: String(row.caseNumber),
         startDate: row.startDate ? row.startDate.slice(0, 10) : '',
         status: row.status,
         eyes: row.eyes ?? '',
@@ -112,6 +114,7 @@ export default function OrthoKDetailPage() {
       await api(`/ortho-k/${enrollmentId}`, {
         method: 'PATCH',
         body: {
+          caseNumber: form.caseNumber ? Number(form.caseNumber) : undefined,
           startDate: form.startDate || undefined,
           status: form.status || undefined,
           eyes: form.eyes || undefined,
@@ -167,7 +170,7 @@ export default function OrthoKDetailPage() {
     <AppShell>
       <BackButton fallbackHref="/ortho-k" />
       <h1>
-        Ortho-K — {patient.lastName}, {patient.firstName}{' '}
+        Ortho-K {enrollment.caseNumber} — {patient.lastName}, {patient.firstName}{' '}
         <span className="badge">{statusLabel(enrollment.status)}</span>{' '}
         <span className="badge">Year {enrollment.programYear}</span>
       </h1>
@@ -254,6 +257,15 @@ export default function OrthoKDetailPage() {
           <form onSubmit={saveDetails}>
             <div className="ok-enroll-grid">
               <label>
+                Case number
+                <input
+                  type="number"
+                  min={1}
+                  value={form.caseNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, caseNumber: e.target.value }))}
+                />
+              </label>
+              <label>
                 First night of wear
                 <input
                   type="date"
@@ -319,6 +331,10 @@ export default function OrthoKDetailPage() {
           </form>
         ) : (
           <dl className="detail-list">
+            <div className="detail-row">
+              <dt>Case number</dt>
+              <dd>{enrollment.caseNumber}</dd>
+            </div>
             <div className="detail-row">
               <dt>First night of wear</dt>
               <dd className={enrollment.startDate ? undefined : 'empty'}>

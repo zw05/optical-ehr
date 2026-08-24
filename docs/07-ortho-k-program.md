@@ -210,8 +210,15 @@ Page layout:
    search box.
 3. **Program board** — one row per enrollment:
 
-   | Patient | Started (+ year) | Last visit | Next due |
-   | ------- | ---------------- | ---------- | -------- |
+   | Case | Patient | Started (+ year) | Last visit | Next due |
+   | ---- | ------- | ---------------- | ---------- | -------- |
+
+   **Case** is the practice's own Ortho-K numbering, counting from 1 and separate
+   from the chart MRN, so the program can be filed the way the practice already
+   files it. It is assigned on enrollment and editable; reusing a number in use
+   is refused and names who holds it. **Next due** is written as a month and year
+   (`Dec 2026`) with the milestone beneath, since a check is booked to a month
+   rather than a day — an overdue one adds the exact days late and turns red.
 
    **Last visit** is the most recent follow-up of any kind, interim visits
    included, with the milestone name beneath the date. The milestone strip lives

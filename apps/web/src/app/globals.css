@@ -3597,3 +3597,12 @@ html[data-reduced-motion='on'] *::after {
   font-weight: 400;
   font-size: 0.82rem;
 }
+
+/* The practice's Ortho-K case number: an identifier column, so it is tabular
+   and never wider than it needs to be. */
+.ok-case {
+  width: 1%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

@@ -99,6 +99,8 @@ export interface OrthoKVisit {
 
 export interface OrthoKEnrollment {
   id: string;
+  /** The practice's own Ortho-K case number, counting from 1. */
+  caseNumber: number;
   status: OrthoKStatus;
   startDate: string | null;
   eyes: string | null;
@@ -140,7 +142,13 @@ export function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString();
 }
 
-/** "17 days late" / "due today" / "in 12 days" — the phrase the board leads with. */
+/** "Dec 2026" — how the board states when a check falls due. */
+export function formatMonthYear(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+/** "17 days late" / "due today" / "in 12 days" — used where lateness is the point. */
 export function describeDue(status: MilestoneStatus | null): string {
   if (!status) return 'No follow-up scheduled';
   const label = milestoneLabel(status.milestone);

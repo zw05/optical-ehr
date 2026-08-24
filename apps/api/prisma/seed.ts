@@ -291,7 +291,7 @@ async function seedOrthoK(practice: Practice) {
   // stored as UTC, and this whole board is driven by calendar dates.
   const today = startOfDay(new Date());
 
-  for (const row of enrollments) {
+  for (const [index, row] of enrollments.entries()) {
     const existing = await prisma.patient.findFirst({
       where: { practiceId: practice.id, mrn: row.mrn },
       select: { id: true },
@@ -339,6 +339,7 @@ async function seedOrthoK(practice: Practice) {
       data: {
         practiceId: practice.id,
         patientId: patient.id,
+        caseNumber: index + 1,
         status: row.status,
         startDate,
         eyes: 'OU',
