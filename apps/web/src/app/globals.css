@@ -3273,11 +3273,6 @@ html[data-reduced-motion='on'] *::after {
 
 /* ---------- Ortho-K program board ---------- */
 
-.ok-intro {
-  margin-top: -0.5rem;
-  max-width: 60ch;
-}
-
 .ok-section-title {
   display: flex;
   align-items: center;

@@ -179,10 +179,6 @@ export default function OrthoKPage() {
   return (
     <AppShell>
       <h1 className="page-header">Ortho-K</h1>
-      <p className="muted ok-intro">
-        Orthokeratology patients and their follow-up sequence. Exam findings stay in the paper
-        folder — record the date each follow-up happened and the board tracks what is due.
-      </p>
 
       <div className="toolbar">
         <button className="secondary" onClick={() => setShowEnroll((v) => !v)}>
