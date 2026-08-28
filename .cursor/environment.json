@@ -1,0 +1,21 @@
+{
+  "name": "Optical EHR",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "npm run dev:api",
+      "description": "NestJS API on http://localhost:3001 (routes under /api)"
+    },
+    {
+      "name": "web",
+      "command": "npm run dev:web",
+      "description": "Next.js staff web app on http://localhost:3000 (proxies /api to the API)"
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 3000 },
+    { "name": "api", "port": 3001 }
+  ]
+}
