@@ -1,16 +1,18 @@
-/* Minimal SaaS design system — scoped under .mn so globals.css is untouched */
+/* Clinical product UI sandbox — scoped under .mn; mirrors production tokens */
 
 .mn {
-  /* Paper (default): single flat white */
+  /* Paper (default) */
   --mn-canvas: #ffffff;
   --mn-surface: #ffffff;
+  --mn-surface-2: #fafaf9;
+  --mn-surface-hover: #f4f4f3;
   --mn-hairline: #e8e8e6;
   --mn-hairline-strong: #d4d4d1;
   --mn-text: #1a1a19;
-  --mn-muted: #6b6b68;
-  --mn-subtle: #9b9b97;
+  --mn-muted: #5c5c58;
+  --mn-subtle: #767670;
   --mn-accent: #2563eb;
-  --mn-accent-soft: rgba(37, 99, 235, 0.08);
+  --mn-accent-soft: rgba(37, 99, 235, 0.1);
   --mn-danger: #dc2626;
   --mn-danger-soft: rgba(220, 38, 38, 0.08);
   --mn-warning: #b45309;
@@ -18,10 +20,10 @@
   --mn-success: #16a34a;
   --mn-success-soft: rgba(22, 163, 74, 0.1);
   --mn-sidebar-w: 224px;
-  --mn-radius: 6px;
+  --mn-radius: 8px;
   --mn-control-h: 32px;
-  --mn-font: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --mn-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  --mn-font: var(--font-geist-sans), 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mn-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
 
   display: flex;
   min-height: 100vh;
@@ -38,37 +40,43 @@
 .mn[data-mn-theme='paper'] {
   --mn-canvas: #ffffff;
   --mn-surface: #ffffff;
+  --mn-surface-2: #fafaf9;
+  --mn-surface-hover: #f4f4f3;
   --mn-hairline: #e8e8e6;
   --mn-hairline-strong: #d4d4d1;
   --mn-text: #1a1a19;
-  --mn-muted: #6b6b68;
-  --mn-subtle: #9b9b97;
+  --mn-muted: #5c5c58;
+  --mn-subtle: #767670;
   --mn-accent: #2563eb;
-  --mn-accent-soft: rgba(37, 99, 235, 0.08);
+  --mn-accent-soft: rgba(37, 99, 235, 0.1);
 }
 
 .mn[data-mn-theme='slate'] {
   --mn-canvas: #f1f5f9;
-  --mn-surface: #f1f5f9;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #f8fafc;
+  --mn-surface-hover: #e8eef4;
   --mn-hairline: #d7e0ea;
   --mn-hairline-strong: #b8c5d4;
   --mn-text: #0f172a;
-  --mn-muted: #64748b;
-  --mn-subtle: #94a3b8;
+  --mn-muted: #475569;
+  --mn-subtle: #64748b;
   --mn-accent: #334155;
   --mn-accent-soft: rgba(51, 65, 85, 0.1);
 }
 
 .mn[data-mn-theme='ink'] {
   --mn-canvas: #0f0f0e;
-  --mn-surface: #0f0f0e;
+  --mn-surface: #181816;
+  --mn-surface-2: #1f1f1d;
+  --mn-surface-hover: #222220;
   --mn-hairline: #2a2a28;
   --mn-hairline-strong: #3a3a37;
   --mn-text: #ececeb;
-  --mn-muted: #9b9b97;
-  --mn-subtle: #6b6b68;
+  --mn-muted: #a8a8a4;
+  --mn-subtle: #8a8a85;
   --mn-accent: #60a5fa;
-  --mn-accent-soft: rgba(96, 165, 250, 0.12);
+  --mn-accent-soft: rgba(96, 165, 250, 0.14);
   --mn-danger: #f87171;
   --mn-danger-soft: rgba(248, 113, 113, 0.12);
   --mn-warning: #fbbf24;
@@ -80,14 +88,16 @@
 
 .mn[data-mn-theme='forest'] {
   --mn-canvas: #0c1210;
-  --mn-surface: #0c1210;
+  --mn-surface: #121a17;
+  --mn-surface-2: #182420;
+  --mn-surface-hover: #1a2621;
   --mn-hairline: #1c2923;
   --mn-hairline-strong: #2c3d34;
   --mn-text: #e6efe9;
-  --mn-muted: #8fa99a;
-  --mn-subtle: #5f7568;
+  --mn-muted: #9db5a8;
+  --mn-subtle: #7a9488;
   --mn-accent: #6ee7b7;
-  --mn-accent-soft: rgba(110, 231, 183, 0.12);
+  --mn-accent-soft: rgba(110, 231, 183, 0.14);
   --mn-danger: #f87171;
   --mn-danger-soft: rgba(248, 113, 113, 0.12);
   --mn-warning: #fbbf24;
