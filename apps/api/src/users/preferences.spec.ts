@@ -25,6 +25,12 @@ describe('mergePreferences', () => {
     expect(mergePreferences({ accessibility: { idleTimeoutMinutes: 2 } }).accessibility.idleTimeoutMinutes).toBe(5);
     expect(mergePreferences({ accessibility: { idleTimeoutMinutes: 99 } }).accessibility.idleTimeoutMinutes).toBe(30);
   });
+
+  it('clamps sidebar width to 180–400 and rejects invalid modes', () => {
+    expect(mergePreferences({ sidebar: { width: 50 } }).sidebar.width).toBe(180);
+    expect(mergePreferences({ sidebar: { width: 999 } }).sidebar.width).toBe(400);
+    expect(mergePreferences({ sidebar: { mode: 'floating' } }).sidebar.mode).toBe('expanded');
+  });
 });
 
 describe('applyPreferencePatch', () => {
@@ -34,5 +40,25 @@ describe('applyPreferencePatch', () => {
     const next = applyPreferencePatch(current, { appearance: { fontScale: 'lg' } });
     expect(next.appearance.theme).toBe('dark');
     expect(next.appearance.fontScale).toBe('lg');
+  });
+
+  it('ignores undefined DTO fields so Nest class instances do not wipe siblings', () => {
+    const current = structuredClone(DEFAULT_PREFERENCES);
+    current.appearance.theme = 'slate';
+    current.appearance.fontScale = 'lg';
+    // Simulate Nest AppearanceDto with unset fields present as undefined.
+    const nestLikePatch = {
+      appearance: {
+        theme: 'forest',
+        fontScale: undefined,
+        density: undefined,
+        fontFamily: undefined,
+      },
+    };
+    const next = applyPreferencePatch(current, nestLikePatch as never);
+    expect(next.appearance.theme).toBe('forest');
+    expect(next.appearance.fontScale).toBe('lg');
+    expect(next.appearance.density).toBe('comfortable');
+    expect(next.appearance.fontFamily).toBe('system');
   });
 });

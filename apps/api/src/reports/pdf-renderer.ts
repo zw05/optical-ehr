@@ -18,6 +18,10 @@ export interface ReportLayout {
   signatureLine?: boolean;
   /** Label under the signature line; defaults to "Provider signature". */
   signatureLabel?: string;
+  /** Blob path of an uploaded provider signature image (PNG/JPEG). */
+  signatureBlobPath?: string;
+  /** Rendered signature width in points; defaults to 140. */
+  signatureWidth?: number;
   paperSize?: 'LETTER' | 'A4';
   margin?: number;
   baseFontSize?: number;
@@ -50,7 +54,7 @@ export interface EyeTable {
 export interface ReportContent {
   title: string;
   practice: { name: string; phone?: string | null; address?: string | null; logoUrl?: string | null };
-  patient: { name: string; mrn: string; dateOfBirth: string };
+  patient: { name: string; mrn: string; dateOfBirth: string | null };
   provider?: { name: string; licenseNumber?: string | null; npi?: string | null };
   issuedAt?: string;
   expiresAt?: string;
@@ -61,6 +65,8 @@ export interface ReportContent {
   remarks?: string;
   /** Resolved logo image bytes (PNG/JPEG); preferred over practice.logoUrl. */
   logoBytes?: Buffer | null;
+  /** Resolved provider signature image bytes (PNG/JPEG). */
+  signatureBytes?: Buffer | null;
 }
 
 const PAGE_SIZES: Record<'LETTER' | 'A4', { width: number; height: number }> = {
@@ -72,9 +78,11 @@ const CELL_PAD = 4;
 const EYE_COL_WIDTH = 36;
 /** Space reserved at the bottom for signature + footer (points). */
 const BOTTOM_BAND = 72;
+/** Extra bottom space when a signature image is present. */
+const SIGNATURE_IMAGE_BAND = 48;
 
 /** Formats an ISO date string (YYYY-MM-DD) according to the layout preference. */
-export function formatReportDate(isoDate: string | undefined, format: ReportLayout['dateFormat']): string {
+export function formatReportDate(isoDate: string | null | undefined, format: ReportLayout['dateFormat']): string {
   if (!isoDate) return '';
   if (!format || format === 'ISO') return isoDate;
   const [y, m, d] = isoDate.split('-').map(Number);
@@ -146,7 +154,9 @@ export class PdfRenderer {
       const patientDob = formatReportDate(content.patient.dateOfBirth, layout.dateFormat);
       const useTable = layout.valueLayout !== 'list';
       const visible = layout.visibleFields ? new Set(layout.visibleFields) : null;
-      const contentBottom = page.height - margin - BOTTOM_BAND;
+      const hasSigImage = !!(content.signatureBytes && content.signatureBytes.length > 0);
+      const bottomBand = BOTTOM_BAND + (hasSigImage ? SIGNATURE_IMAGE_BAND : 0);
+      const contentBottom = page.height - margin - bottomBand;
 
       if (layout.copiesLabel) {
         doc.fontSize(baseFont - 1).font(regular).fillColor(accent).text(layout.copiesLabel, {
@@ -199,9 +209,8 @@ export class PdfRenderer {
 
       // Patient / provider block
       doc.fontSize(baseFont).font(regular);
-      doc.text(
-        `Patient: ${content.patient.name}   MRN: ${content.patient.mrn}   DOB: ${patientDob || content.patient.dateOfBirth}`,
-      );
+      const dobLabel = patientDob || content.patient.dateOfBirth || '—';
+      doc.text(`Patient: ${content.patient.name}   MRN: ${content.patient.mrn}   DOB: ${dobLabel}`);
       if (content.provider) {
         const showCreds = layout.showPrescriberCredentials !== false;
         const credentials = showCreds
@@ -308,7 +317,17 @@ export class PdfRenderer {
 
       // Signature pinned into the reserved bottom band
       if (layout.signatureLine !== false) {
-        const sigY = page.height - margin - BOTTOM_BAND + 16;
+        const sigY = page.height - margin - bottomBand + 16 + (hasSigImage ? SIGNATURE_IMAGE_BAND : 0);
+        if (hasSigImage) {
+          const sigW = Math.max(40, Math.min(220, layout.signatureWidth ?? 140));
+          try {
+            doc.image(content.signatureBytes!, margin, sigY - SIGNATURE_IMAGE_BAND, {
+              fit: [sigW, SIGNATURE_IMAGE_BAND - 4],
+            });
+          } catch {
+            // corrupt signature image — still draw the line
+          }
+        }
         doc.moveTo(margin, sigY).lineTo(margin + 226, sigY).stroke();
         const sigLabel = layout.signatureLabel?.trim() || 'Provider signature';
         doc.fontSize(baseFont - 1).font(regular).text(sigLabel, margin, sigY + 4);

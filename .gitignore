@@ -11,3 +11,6 @@ coverage/
 
 # Local blob-storage fallback (generated PDFs)
 blob-dev/
+
+# Local agent tooling: dev server launch config and session state
+.claude/

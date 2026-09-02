@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { TabStrip } from '@/components/TabStrip';
 import { getSessionUser, api } from '@/lib/api';
@@ -15,7 +14,13 @@ import type {
   Density,
   FontFamilyPref,
   FontScale,
+  SidebarMode,
   ThemePreference,
+} from '@/lib/preferences';
+import {
+  DEFAULT_SIDEBAR_W,
+  SIDEBAR_MAX_W,
+  SIDEBAR_MIN_W,
 } from '@/lib/preferences';
 
 type SettingsTab = 'appearance' | 'dashboard' | 'exam' | 'printing' | 'accessibility';
@@ -37,6 +42,8 @@ interface ReportLayoutEditor {
   logoWidth?: number;
   signatureLine?: boolean;
   signatureLabel?: string;
+  signatureBlobPath?: string;
+  signatureWidth?: number;
   paperSize?: 'LETTER' | 'A4';
   margin?: number;
   baseFontSize?: number;
@@ -120,6 +127,12 @@ const LANDING_OPTIONS = [
   { value: '/exams', label: 'Exams' },
 ];
 
+const SIDEBAR_MODE_OPTIONS: { value: SidebarMode; label: string; help: string }[] = [
+  { value: 'expanded', label: 'Expanded', help: 'Full labels always visible' },
+  { value: 'rail', label: 'Icons only', help: 'Compact icon rail' },
+  { value: 'auto', label: 'Auto-compact', help: 'Opens on hover or focus' },
+];
+
 export default function SettingsPage() {
   const { prefs, update, reset, saving } = usePreferences();
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
@@ -140,11 +153,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="settings-header">
-        <h1 className="page-header" style={{ margin: 0 }}>
-          Settings
-        </h1>
+        <h2 className="page-header" style={{ margin: 0 }}>
+          My preferences
+        </h2>
         {(saving || savedFlash) && (
           <span className="settings-saved" aria-live="polite">
             {saving ? 'Saving…' : 'Saved'}
@@ -173,6 +186,8 @@ export default function SettingsPage() {
             density={prefs.appearance.density}
             fontFamily={prefs.appearance.fontFamily}
             landingRoute={prefs.dashboard.landingRoute}
+            sidebarMode={prefs.sidebar.mode}
+            sidebarWidth={prefs.sidebar.width}
             onChange={patch}
           />
         )}
@@ -220,7 +235,7 @@ export default function SettingsPage() {
           />
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 
@@ -230,6 +245,8 @@ function AppearanceSection({
   density,
   fontFamily,
   landingRoute,
+  sidebarMode,
+  sidebarWidth,
   onChange,
 }: {
   theme: ThemePreference;
@@ -237,6 +254,8 @@ function AppearanceSection({
   density: Density;
   fontFamily: FontFamilyPref;
   landingRoute: string;
+  sidebarMode: SidebarMode;
+  sidebarWidth: number;
   onChange: (p: Parameters<ReturnType<typeof usePreferences>['update']>[0]) => Promise<void>;
 }) {
   return (
@@ -303,6 +322,58 @@ function AppearanceSection({
             />
             Compact
           </label>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-label">Sidebar</div>
+          <span className="settings-row-help">Desktop navigation layout</span>
+        </div>
+        <div className="settings-choices">
+          {SIDEBAR_MODE_OPTIONS.map((o) => (
+            <label key={o.value} className="exam-choice" title={o.help}>
+              <input
+                type="radio"
+                name="sidebarMode"
+                checked={sidebarMode === o.value}
+                onChange={() => onChange({ sidebar: { mode: o.value } })}
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-label">Sidebar width</div>
+          <span className="settings-row-help">
+            {sidebarMode === 'rail'
+              ? 'Not used while icons-only is selected'
+              : `${sidebarWidth}px (drag the sidebar edge to resize)`}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '14rem' }}>
+          <input
+            type="range"
+            min={SIDEBAR_MIN_W}
+            max={SIDEBAR_MAX_W}
+            step={4}
+            value={sidebarWidth}
+            disabled={sidebarMode === 'rail'}
+            aria-label="Sidebar width in pixels"
+            onChange={(e) => onChange({ sidebar: { width: Number(e.target.value) } })}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="secondary"
+            disabled={sidebarMode === 'rail' || sidebarWidth === DEFAULT_SIDEBAR_W}
+            onClick={() => onChange({ sidebar: { width: DEFAULT_SIDEBAR_W } })}
+          >
+            Reset
+          </button>
         </div>
       </div>
 
@@ -901,6 +972,47 @@ function AdminPrintTemplateEditor() {
     }
   }
 
+  async function onSignatureSelected(file: File | null) {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      setStatus('Signature must be a PNG or JPEG');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setStatus('Signature must be 1 MB or smaller');
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      const uploaded = await api<{ blobPath: string }>('/reports/templates/signature', {
+        method: 'POST',
+        body: { fileName: file.name, contentType: file.type, dataBase64 },
+      });
+      setLayout((prev) => ({
+        ...prev,
+        signatureLine: true,
+        signatureBlobPath: uploaded.blobPath,
+        signatureWidth: prev.signatureWidth ?? 140,
+      }));
+      setStatus('Signature uploaded — preview or publish to apply');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Signature upload failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function clearSignature() {
+    setLayout((prev) => {
+      const next = { ...prev };
+      delete next.signatureBlobPath;
+      return next;
+    });
+    setStatus('Signature cleared — preview or publish to apply');
+  }
+
   return (
     <div className="settings-section" style={{ marginTop: '1rem' }}>
       <h2>Practice Rx print templates</h2>
@@ -1111,6 +1223,37 @@ function AdminPrintTemplateEditor() {
                 value={layout.signatureLabel ?? ''}
                 onChange={(e) => setField('signatureLabel', e.target.value)}
               />
+            </div>
+            <div className="field">
+              <label htmlFor="signatureWidth">Signature width (pt)</label>
+              <input
+                id="signatureWidth"
+                type="number"
+                min={40}
+                max={220}
+                value={layout.signatureWidth ?? 140}
+                onChange={(e) => setField('signatureWidth', Number(e.target.value))}
+              />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="signatureFile">Provider signature image</label>
+              <input
+                id="signatureFile"
+                type="file"
+                accept="image/png,image/jpeg"
+                disabled={busy}
+                onChange={(e) => onSignatureSelected(e.target.files?.[0] ?? null)}
+              />
+              {layout.signatureBlobPath && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.35rem' }}>
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    Uploaded: {layout.signatureBlobPath}
+                  </span>
+                  <button type="button" className="secondary" disabled={busy} onClick={clearSignature}>
+                    Clear
+                  </button>
+                </div>
+              )}
             </div>
             <div className="field">
               <label htmlFor="logoWidth">Logo width (pt)</label>

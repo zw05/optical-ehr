@@ -12,7 +12,13 @@ insurance and clinical records only — no claim submission and no electronic pr
 | Technician    | Pre-testing (VA, IOP, auto-refraction), history intake                   | Clinical write on assigned encounter sections; no sign-off |
 | Optician      | Spectacle/contact-lens orders, dispensing, measurements, remakes         | Orders read/write, prescription read-only |
 | Receptionist  | Scheduling, check-in, demographics, insurance records, recalls           | Demographics/scheduling read/write; clinical read limited to flags |
-| Administrator | User management, templates, reports configuration, exports, audit review | All modules plus settings; clinical writes still attributed individually |
+| Administrator | User management, templates, reports configuration, exports, audit review | All modules; sole holder of account and permission management; clinical writes still attributed individually |
+
+Store settings are the exception to the table above: maintaining the practice's own catalogs
+(lens and contact lens pricing, frames, accepted insurances, billing codes) is front-of-house
+work, so every signed-in role may do it by default. An administrator can grant or revoke any
+of those capabilities for an individual without changing their role. Staff accounts and
+permissions remain administrator-only.
 
 Every role authenticates with MFA. All PHI access is audit-logged with actor, patient,
 timestamp, action, and session.

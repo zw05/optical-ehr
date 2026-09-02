@@ -1,10 +1,12 @@
 'use client';
 
-/** Day calendar with appointment lifecycle actions (confirm, check in, complete, cancel). */
-import { useCallback, useEffect, useState } from 'react';
+/** Day calendar with booking, walk-ins, and appointment lifecycle actions. */
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
-import { api } from '@/lib/api';
+import AppointmentStatusActions from '@/components/scheduling/AppointmentStatusActions';
+import BookAppointmentForm from '@/components/scheduling/BookAppointmentForm';
+import { api, getSessionUser } from '@/lib/api';
 
 interface Appointment {
   id: string;
@@ -17,31 +19,12 @@ interface Appointment {
   type: { id: string; name: string };
 }
 
-interface AppointmentType {
-  id: string;
-  name: string;
-  durationMin: number;
-}
-
-const NEXT_STATUS: Record<string, { label: string; status: string }[]> = {
-  SCHEDULED: [
-    { label: 'Confirm', status: 'CONFIRMED' },
-    { label: 'Check in', status: 'CHECKED_IN' },
-    { label: 'No-show', status: 'NO_SHOW' },
-  ],
-  CONFIRMED: [
-    { label: 'Check in', status: 'CHECKED_IN' },
-    { label: 'No-show', status: 'NO_SHOW' },
-  ],
-  CHECKED_IN: [{ label: 'Start exam', status: 'IN_PROGRESS' }],
-  IN_PROGRESS: [{ label: 'Complete', status: 'COMPLETED' }],
-};
-
 export default function SchedulePage() {
+  const sessionUser = useMemo(() => getSessionUser(), []);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [types, setTypes] = useState<AppointmentType[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showBook, setShowBook] = useState(false);
 
   const load = useCallback(async () => {
     const start = new Date(`${date}T00:00:00`);
@@ -52,22 +35,11 @@ export default function SchedulePage() {
   }, [date]);
 
   useEffect(() => {
-    void load();
-    api<AppointmentType[]>('/appointments/types').then(setTypes).catch(() => setTypes([]));
+    void load().catch(() => setAppointments([]));
   }, [load]);
 
-  async function setStatus(id: string, status: string) {
-    setError(null);
-    try {
-      const cancelReason =
-        status === 'CANCELLED' ? (window.prompt('Cancellation reason:') ?? undefined) : undefined;
-      if (status === 'CANCELLED' && !cancelReason) return;
-      await api(`/appointments/${id}/status`, { method: 'PATCH', body: { status, cancelReason } });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed');
-    }
-  }
+  const waiting = useMemo(() => appointments.filter((a) => a.status === 'WAITING'), [appointments]);
+  const scheduled = useMemo(() => appointments.filter((a) => a.status !== 'WAITING'), [appointments]);
 
   return (
     <AppShell>
@@ -80,14 +52,86 @@ export default function SchedulePage() {
           style={{ maxWidth: 180 }}
           aria-label="Schedule date"
         />
-        <span className="muted">
-          {types.length > 0 && `Appointment types: ${types.map((t) => t.name).join(', ')}`}
-        </span>
+        <button
+          type="button"
+          className={showBook ? 'secondary' : undefined}
+          onClick={() => {
+            setShowBook((v) => !v);
+            setError(null);
+          }}
+        >
+          {showBook ? 'Close book form' : 'Book appointment'}
+        </button>
       </div>
+
       {error && <p className="error-text">{error}</p>}
+
+      {showBook && (
+        <BookAppointmentForm
+          defaultDate={date}
+          onSuccess={async () => {
+            setShowBook(false);
+            setError(null);
+            await load();
+          }}
+          onCancel={() => setShowBook(false)}
+        />
+      )}
+
+      {waiting.length > 0 && (
+        <section className="panel" style={{ marginBottom: '1rem' }}>
+          <div className="panel-header">Waiting room ({waiting.length})</div>
+          <div className="panel-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Arrived</th>
+                  <th>Patient</th>
+                  <th>Type</th>
+                  <th>Provider</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waiting.map((a) => (
+                  <tr key={a.id}>
+                    <td>
+                      {new Date(a.startsAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td>
+                      <Link href={`/patients/${a.patient.id}`}>
+                        {a.patient.lastName}, {a.patient.firstName}
+                      </Link>
+                      <span className="muted"> {a.patient.mrn}</span>
+                    </td>
+                    <td>{a.type.name}</td>
+                    <td>Dr. {a.provider.lastName}</td>
+                    <td>
+                      <AppointmentStatusActions
+                        appointmentId={a.id}
+                        status={a.status}
+                        role={sessionUser?.role}
+                        onUpdated={load}
+                        onError={setError}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <div className="card">
-        {appointments.length === 0 ? (
-          <p className="muted">No appointments for this day. Book from a patient chart.</p>
+        {scheduled.length === 0 ? (
+          <p className="muted">
+            No scheduled appointments for this day. Use Book appointment above — including walk-ins
+            for patients who arrive without a slot.
+          </p>
         ) : (
           <table>
             <thead>
@@ -101,11 +145,18 @@ export default function SchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {appointments.map((a) => (
+              {scheduled.map((a) => (
                 <tr key={a.id}>
                   <td>
-                    {new Date(a.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–
-                    {new Date(a.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(a.startsAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    –
+                    {new Date(a.endsAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </td>
                   <td>
                     <Link href={`/patients/${a.patient.id}`}>
@@ -129,25 +180,13 @@ export default function SchedulePage() {
                     </span>
                   </td>
                   <td>
-                    {(NEXT_STATUS[a.status] ?? []).map((action) => (
-                      <button
-                        key={action.status}
-                        className="secondary"
-                        style={{ marginRight: 4, padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}
-                        onClick={() => setStatus(a.id, action.status)}
-                      >
-                        {action.label}
-                      </button>
-                    ))}
-                    {a.status !== 'CANCELLED' && a.status !== 'COMPLETED' && a.status !== 'NO_SHOW' && (
-                      <button
-                        className="danger"
-                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}
-                        onClick={() => setStatus(a.id, 'CANCELLED')}
-                      >
-                        Cancel
-                      </button>
-                    )}
+                    <AppointmentStatusActions
+                      appointmentId={a.id}
+                      status={a.status}
+                      role={sessionUser?.role}
+                      onUpdated={load}
+                      onError={setError}
+                    />
                   </td>
                 </tr>
               ))}

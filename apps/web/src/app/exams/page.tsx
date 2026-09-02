@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
-type ExamTab = 'recent' | 'unfinished' | 'finalized';
+type ExamTab = 'recent' | 'unfinished' | 'finalized' | 'voided';
 type SortBy = 'createdAt' | 'patient' | 'status';
 type SortOrder = 'asc' | 'desc';
 
@@ -23,7 +23,7 @@ interface InsuranceRow {
 
 interface ExamRow {
   id: string;
-  status: 'IN_PROGRESS' | 'SIGNED';
+  status: 'IN_PROGRESS' | 'SIGNED' | 'VOIDED';
   chiefComplaint: string | null;
   assessment: string | null;
   createdAt: string;
@@ -32,7 +32,7 @@ interface ExamRow {
     mrn: string;
     firstName: string;
     lastName: string;
-    dateOfBirth: string;
+    dateOfBirth: string | null;
     insurances: InsuranceRow[];
   };
   appointment: { provider: StaffName } | null;
@@ -41,7 +41,7 @@ interface ExamRow {
 
 interface ListResponse {
   rows: ExamRow[];
-  counts: { recent: number; unfinished: number; finalized: number };
+  counts: { recent: number; unfinished: number; finalized: number; voided: number };
   options: { reasons: string[]; impressions: string[]; insurances: string[] };
 }
 
@@ -67,6 +67,7 @@ const TABS: { key: ExamTab; label: string }[] = [
   { key: 'recent', label: 'Recent Exams' },
   { key: 'unfinished', label: 'Unfinished Exams' },
   { key: 'finalized', label: 'Finalized Exams' },
+  { key: 'voided', label: 'Voided Exams' },
 ];
 
 function pickInsurance(insurances: InsuranceRow[], vision: boolean): string {
@@ -79,8 +80,22 @@ function providerLabel(row: ExamRow): string {
   return person ? `${person.lastName}, ${person.firstName}` : '—';
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString();
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+}
+
+function statusLabel(status: ExamRow['status']): string {
+  if (status === 'SIGNED') return 'Finalized';
+  if (status === 'VOIDED') return 'Voided';
+  return 'In Progress';
+}
+
+function statusBadgeClass(status: ExamRow['status']): string {
+  if (status === 'SIGNED') return 'success';
+  if (status === 'VOIDED') return 'danger';
+  return 'warning';
 }
 
 export default function ExamsPage() {
@@ -91,7 +106,7 @@ export default function ExamsPage() {
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [rows, setRows] = useState<ExamRow[]>([]);
-  const [counts, setCounts] = useState({ recent: 0, unfinished: 0, finalized: 0 });
+  const [counts, setCounts] = useState({ recent: 0, unfinished: 0, finalized: 0, voided: 0 });
   const [options, setOptions] = useState({ reasons: [] as string[], impressions: [] as string[], insurances: [] as string[] });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -293,8 +308,8 @@ export default function ExamsPage() {
                   <td>{row.assessment ?? '—'}</td>
                   <td>{formatDate(row.createdAt)}</td>
                   <td>
-                    <span className={`badge ${row.status === 'SIGNED' ? 'success' : 'warning'}`}>
-                      {row.status === 'SIGNED' ? 'Finalized' : 'In Progress'}
+                    <span className={`badge ${statusBadgeClass(row.status)}`}>
+                      {statusLabel(row.status)}
                     </span>
                   </td>
                   <td>{providerLabel(row)}</td>

@@ -1,0 +1,379 @@
+'use client';
+
+/**
+ * The Ortho-K program board: every patient in the orthokeratology program, the
+ * follow-up each one is owed next, and a needs-attention panel for the checks
+ * that have slipped.
+ *
+ * Ortho-K exams stay in the paper folder, so nothing here records findings —
+ * staff log the date a follow-up happened and the board works out what is due.
+ */
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import AppShell from '@/components/AppShell';
+import PatientSearchBox, { type PatientSuggestion } from '@/components/PatientSearchBox';
+import { api } from '@/lib/api';
+import {
+  describeDue,
+  formatDate,
+  formatMonthYear,
+  milestoneLabel,
+  ORTHO_K_STATUSES,
+  statusLabel,
+  todayInputValue,
+  type MilestoneState,
+  type OrthoKEnrollment,
+  type OrthoKStatus,
+} from '@/lib/orthoK';
+
+const EMPTY_ENROLL = {
+  patientId: '',
+  patientLabel: '',
+  number: '',
+  startDate: '',
+  notes: '',
+};
+
+/**
+ * The follow-ups someone has to chase today, at the top of the board.
+ *
+ * A compact list rather than a grid of cards: this is a queue to scan and work
+ * through, and the surrounding app states urgency the same quiet way — the
+ * overdue phrase carries the colour, and nothing else repeats it.
+ */
+function NeedsAttention({
+  rows,
+  onLog,
+}: {
+  rows: OrthoKEnrollment[];
+  onLog: (row: OrthoKEnrollment) => void;
+}) {
+  if (rows.length === 0) return null;
+
+  const overdue = rows.filter((r) => r.next?.state === 'OVERDUE').length;
+  const due = rows.length - overdue;
+  const summary = [
+    overdue > 0 ? `${overdue} overdue` : null,
+    due > 0 ? `${due} due now` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <div className="card">
+      <h2 className="ok-section-title">
+        Needs attention
+        <span className="ok-section-note muted">{summary}</span>
+      </h2>
+      <table>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td className="ok-case">{row.number}</td>
+              <td>
+                <Link href={`/ortho-k/${row.id}`}>
+                  {row.patient.lastName}, {row.patient.firstName}
+                </Link>{' '}
+                <span className="muted">{row.patient.mrn}</span>
+              </td>
+              <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
+                {describeDue(row.next)}
+              </td>
+              <td className="muted">{row.patient.phone ?? '—'}</td>
+              <td className="ok-row-action">
+                <button type="button" className="secondary ok-inline-button" onClick={() => onLog(row)}>
+                  Log visit
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function OrthoKPage() {
+  const [rows, setRows] = useState<OrthoKEnrollment[]>([]);
+  const [status, setStatus] = useState<'' | OrthoKStatus>('');
+  const [state, setState] = useState<'' | MilestoneState>('');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showEnroll, setShowEnroll] = useState(false);
+  const [enroll, setEnroll] = useState(EMPTY_ENROLL);
+
+  // Quick-log form opened from a needs-attention card.
+  const [logFor, setLogFor] = useState<OrthoKEnrollment | null>(null);
+  const [logDate, setLogDate] = useState(todayInputValue());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (state) params.set('state', state);
+      if (query.trim()) params.set('q', query.trim());
+      const search = params.toString();
+      setRows(await api<OrthoKEnrollment[]>(`/ortho-k${search ? `?${search}` : ''}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the Ortho-K board');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [status, state, query]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submitEnroll(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (!enroll.patientId) {
+      setError('Choose a patient to enroll');
+      return;
+    }
+    try {
+      await api('/ortho-k', {
+        method: 'POST',
+        body: {
+          patientId: enroll.patientId,
+          number: enroll.number ? Number(enroll.number) : undefined,
+          startDate: enroll.startDate || undefined,
+          notes: enroll.notes || undefined,
+        },
+      });
+      setEnroll(EMPTY_ENROLL);
+      setShowEnroll(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to enroll patient');
+    }
+  }
+
+  async function submitLog(event: FormEvent) {
+    event.preventDefault();
+    if (!logFor?.next) return;
+    setError(null);
+    try {
+      await api(`/ortho-k/${logFor.id}/visits`, {
+        method: 'POST',
+        body: { milestone: logFor.next.milestone, visitDate: logDate },
+      });
+      setLogFor(null);
+      setLogDate(todayInputValue());
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to log the visit');
+    }
+  }
+
+  const attention = rows.filter(
+    (r) => r.next?.state === 'OVERDUE' || r.next?.state === 'DUE',
+  );
+
+  return (
+    <AppShell>
+      <h1 className="page-header">Ortho-K</h1>
+
+      <div className="toolbar">
+        <button className="secondary" onClick={() => setShowEnroll((v) => !v)}>
+          {showEnroll ? 'Close' : 'Enroll patient'}
+        </button>
+        <div className="toolbar-end ok-filters">
+          <label>
+            Status
+            <select value={status} onChange={(e) => setStatus(e.target.value as OrthoKStatus | '')}>
+              <option value="">Active programs</option>
+              {ORTHO_K_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Follow-up
+            <select value={state} onChange={(e) => setState(e.target.value as MilestoneState | '')}>
+              <option value="">All</option>
+              <option value="OVERDUE">Overdue</option>
+              <option value="DUE">Due now</option>
+              <option value="UPCOMING">Upcoming</option>
+            </select>
+          </label>
+          <label>
+            Patient
+            <input
+              type="search"
+              value={query}
+              placeholder="Name or MRN"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+
+      {error && <p className="error-text">{error}</p>}
+
+      {showEnroll && (
+        <form className="card ok-enroll" onSubmit={submitEnroll}>
+          <h2 className="ok-section-title">Enroll a patient</h2>
+          <div className="ok-enroll-grid">
+            <label className="ok-enroll-wide">
+              Patient
+              {enroll.patientId ? (
+                <div className="ok-chosen">
+                  <span>{enroll.patientLabel}</span>
+                  <button
+                    type="button"
+                    className="secondary ok-inline-button"
+                    onClick={() => setEnroll((f) => ({ ...f, patientId: '', patientLabel: '' }))}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <PatientSearchBox
+                  value={enroll.patientLabel}
+                  onChange={(v) => setEnroll((f) => ({ ...f, patientLabel: v }))}
+                  onSubmit={() => undefined}
+                  onSelect={(p: PatientSuggestion) =>
+                    setEnroll((f) => ({
+                      ...f,
+                      patientId: p.id,
+                      patientLabel: `${p.lastName}, ${p.firstName} (${p.mrn})`,
+                    }))
+                  }
+                />
+              )}
+            </label>
+            <label>
+              Number
+              <input
+                type="number"
+                min={1}
+                value={enroll.number}
+                placeholder="Next free number"
+                onChange={(e) => setEnroll((f) => ({ ...f, number: e.target.value }))}
+              />
+            </label>
+            <label>
+              First night of wear
+              <input
+                type="date"
+                value={enroll.startDate}
+                onChange={(e) => setEnroll((f) => ({ ...f, startDate: e.target.value }))}
+              />
+              <span className="ok-hint">Leave blank while lenses are on order.</span>
+            </label>
+            <label className="ok-enroll-wide">
+              Notes
+              <input
+                value={enroll.notes}
+                onChange={(e) => setEnroll((f) => ({ ...f, notes: e.target.value }))}
+              />
+            </label>
+          </div>
+          <button type="submit">Enroll</button>
+        </form>
+      )}
+
+      {logFor && (
+        <form className="card ok-quicklog" onSubmit={submitLog}>
+          <h2 className="ok-section-title">
+            Log {milestoneLabel(logFor.next?.milestone ?? '')} — {logFor.patient.lastName},{' '}
+            {logFor.patient.firstName}
+          </h2>
+          <div className="ok-quicklog-row">
+            <label>
+              Visit date
+              <input
+                type="date"
+                value={logDate}
+                onChange={(e) => setLogDate(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit">Record visit</button>
+            <button type="button" className="secondary" onClick={() => setLogFor(null)}>
+              Cancel
+            </button>
+            <Link href={`/ortho-k/${logFor.id}`} className="ok-detail-link">
+              Open full record
+            </Link>
+          </div>
+        </form>
+      )}
+
+      {!state && <NeedsAttention rows={attention} onLog={setLogFor} />}
+
+      <div className="card">
+        {loading ? (
+          <p className="muted">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="muted">No patients on the Ortho-K board.</p>
+        ) : (
+          <table className="ok-table">
+            <thead>
+              <tr>
+                <th>Number</th>
+                <th>Patient</th>
+                <th>Started</th>
+                <th>Last visit</th>
+                <th>Next due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                // The API returns visits newest first, so the head of the list is
+                // the most recent follow-up, interim visits included.
+                const lastVisit = row.visits[0];
+                return (
+                  <tr key={row.id}>
+                    <td className="ok-case">{row.number}</td>
+                    <td>
+                      <Link href={`/ortho-k/${row.id}`}>
+                        {row.patient.lastName}, {row.patient.firstName}
+                      </Link>
+                      <div className="muted">{row.patient.mrn}</div>
+                    </td>
+                    <td>
+                      {formatDate(row.startDate)}
+                      <div className="muted">Year {row.programYear}</div>
+                    </td>
+                    <td className={lastVisit ? undefined : 'muted'}>
+                      {lastVisit ? (
+                        <>
+                          {formatDate(lastVisit.visitDate)}
+                          <div className="muted">{milestoneLabel(lastVisit.milestone)}</div>
+                        </>
+                      ) : (
+                        'None yet'
+                      )}
+                    </td>
+                    <td className={row.next?.state === 'OVERDUE' ? 'ok-overdue-text' : undefined}>
+                      {row.next ? formatMonthYear(row.next.dueDate) : 'Not scheduled'}
+                      {row.next && (
+                        <div className={row.next.state === 'OVERDUE' ? undefined : 'muted'}>
+                          {row.next.state === 'OVERDUE'
+                            ? `${milestoneLabel(row.next.milestone)} · ${row.next.daysLate} day${
+                                row.next.daysLate === 1 ? '' : 's'
+                              } late`
+                            : milestoneLabel(row.next.milestone)}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AppShell>
+  );
+}

@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 import { SchedulingService } from './scheduling.service';
 import {
+  CalendarQueryDto,
   CreateAppointmentDto,
   CreateAppointmentTypeDto,
   SetStatusDto,
@@ -36,15 +37,16 @@ export class SchedulingController {
     return this.scheduling.create(user.practiceId, dto);
   }
 
-  /** GET /api/appointments?from=&to=&providerId= — calendar range query. */
+  /** GET /api/appointments?from=&to=&providerId=&status= — calendar range query. */
   @Get()
-  calendar(
-    @CurrentUser() user: JwtPayload,
-    @Query('from') from: string,
-    @Query('to') to: string,
-    @Query('providerId') providerId?: string,
-  ) {
-    return this.scheduling.calendar(user.practiceId, from, to, providerId);
+  calendar(@CurrentUser() user: JwtPayload, @Query() query: CalendarQueryDto) {
+    return this.scheduling.calendar(
+      user.practiceId,
+      query.from,
+      query.to,
+      query.providerId,
+      query.status,
+    );
   }
 
   /** PATCH /api/appointments/:id — reschedule time/provider/type. */
@@ -54,10 +56,14 @@ export class SchedulingController {
     return this.scheduling.update(user.practiceId, id, dto);
   }
 
-  /** PATCH /api/appointments/:id/status — lifecycle transitions (check-in opens the encounter). */
+  /**
+   * PATCH /api/appointments/:id/status — lifecycle transitions (check-in opens
+   * the encounter). Reception can work the arrival half of the lifecycle; the
+   * service further restricts starting and completing an exam to clinical staff.
+   */
   @Patch(':id/status')
   @Roles(Role.RECEPTIONIST, Role.TECHNICIAN, Role.DOCTOR)
   setStatus(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: SetStatusDto) {
-    return this.scheduling.setStatus(user.practiceId, id, dto);
+    return this.scheduling.setStatus(user.practiceId, id, dto, user.role);
   }
 }

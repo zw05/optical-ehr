@@ -36,7 +36,7 @@ export class BlobStorageService {
    * date-prefixed with a random UUID so names never collide and never leak
    * patient information. The hash lets callers verify integrity later.
    */
-  async upload(container: 'documents' | 'reports' | 'logos', fileName: string, data: Buffer): Promise<StoredBlob> {
+  async upload(container: 'documents' | 'reports' | 'logos' | 'signatures', fileName: string, data: Buffer): Promise<StoredBlob> {
     const sha256 = createHash('sha256').update(data).digest('hex');
     const blobPath = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${sanitize(fileName)}`;
 
@@ -52,7 +52,7 @@ export class BlobStorageService {
   }
 
   /** Reads a stored file back as a buffer (Azure or local dev backend). */
-  async download(container: 'documents' | 'reports' | 'logos', blobPath: string): Promise<Buffer> {
+  async download(container: 'documents' | 'reports' | 'logos' | 'signatures', blobPath: string): Promise<Buffer> {
     if (this.client) {
       const blob = this.client.getContainerClient(container).getBlockBlobClient(blobPath);
       return Buffer.from(await blob.downloadToBuffer());

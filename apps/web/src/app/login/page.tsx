@@ -1,7 +1,7 @@
 'use client';
 
 /** Staff sign-in; stores JWT in sessionStorage and redirects to the dashboard. */
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { setSession, SessionUser } from '@/lib/api';
 
@@ -30,8 +30,9 @@ export default function LoginPage() {
         accessToken: string;
         user: SessionUser;
         preferences?: import('@/lib/preferences').UserPreferences;
+        permissions?: string[];
       } = await response.json();
-      setSession(data.accessToken, data.user, data.preferences);
+      setSession(data.accessToken, data.user, data.preferences, data.permissions);
       const landing = data.preferences?.dashboard?.landingRoute || '/dashboard';
       router.push(landing);
     } catch (err) {
@@ -43,38 +44,55 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrap">
-      <div className="card login-card">
-        <h1>Optical EHR</h1>
-        <p className="muted">Staff sign-in. All access is logged.</p>
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <button type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+      <div className="login-layout">
+        <div className="login-brand-panel">
+          <LoginBrand />
+          <p className="login-tagline">Staff sign-in. All access is logged.</p>
+        </div>
+        <div className="card login-card">
+          <form onSubmit={handleSubmit}>
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            <button type="submit" disabled={busy}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
+}
+
+function LoginBrand() {
+  const [name, setName] = useState('popEHR');
+  useEffect(() => {
+    fetch('/api/practice/branding')
+      .then((r) => r.json())
+      .then((d: { name?: string }) => {
+        if (d.name) setName(d.name);
+      })
+      .catch(() => undefined);
+  }, []);
+  return <h1>{name}</h1>;
 }

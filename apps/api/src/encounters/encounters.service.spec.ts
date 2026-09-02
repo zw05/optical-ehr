@@ -87,6 +87,12 @@ describe('EncountersService.update', () => {
     await expect(service.update('pr-1', 'enc-1', { assessment: 'changed' })).rejects.toThrow(/immutable/);
   });
 
+  it('blocks edits to voided encounters', async () => {
+    const { service, prisma } = makeService();
+    prisma.encounter.findFirst.mockResolvedValue({ ...completeEncounter, status: EncounterStatus.VOIDED });
+    await expect(service.update('pr-1', 'enc-1', { assessment: 'changed' })).rejects.toThrow(/read-only/);
+  });
+
   it('merges clinical sections instead of replacing them', async () => {
     const { service, prisma } = makeService();
     prisma.encounter.findFirst.mockResolvedValue(completeEncounter);
@@ -96,6 +102,50 @@ describe('EncountersService.update', () => {
       iop: { od: 15, os: 16, method: 'NCT' },
       visualAcuity: { odDistance: '20/20' },
     });
+  });
+});
+
+describe('EncountersService.voidEncounter', () => {
+  it('rejects non-doctors', async () => {
+    const { service, prisma } = makeService();
+    prisma.encounter.findFirst.mockResolvedValue(completeEncounter);
+    await expect(
+      service.voidEncounter('pr-1', 'enc-1', tech, { reason: 'Opened for wrong patient' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('requires a non-empty reason', async () => {
+    const { service, prisma } = makeService();
+    prisma.encounter.findFirst.mockResolvedValue(completeEncounter);
+    await expect(service.voidEncounter('pr-1', 'enc-1', doctor, { reason: '   ' })).rejects.toThrow(
+      /reason is required/,
+    );
+  });
+
+  it('refuses to void a signed encounter', async () => {
+    const { service, prisma } = makeService();
+    prisma.encounter.findFirst.mockResolvedValue({ ...completeEncounter, status: EncounterStatus.SIGNED });
+    await expect(
+      service.voidEncounter('pr-1', 'enc-1', doctor, { reason: 'Mistake' }),
+    ).rejects.toThrow(/cannot be voided/);
+  });
+
+  it('voids a draft and writes a DELETE audit event', async () => {
+    const { service, prisma, audit } = makeService();
+    prisma.encounter.findFirst.mockResolvedValue(completeEncounter);
+    await service.voidEncounter('pr-1', 'enc-1', doctor, { reason: 'Opened for wrong patient' });
+    expect(prisma.encounter.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: EncounterStatus.VOIDED,
+          voidedById: 'doc-1',
+          voidReason: 'Opened for wrong patient',
+        }),
+      }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DELETE', entityType: 'Encounter', detail: expect.stringContaining('wrong patient') }),
+    );
   });
 });
 

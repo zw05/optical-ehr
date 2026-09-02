@@ -13,6 +13,7 @@ import {
   CreateEncounterDto,
   ListEncountersDto,
   UpdateEncounterDto,
+  VoidEncounterDto,
 } from './encounters.dto';
 
 const RECENT_DAYS = 7;
@@ -89,6 +90,7 @@ export class EncountersService {
           },
         },
         signedBy: { select: { firstName: true, lastName: true, licenseNumber: true } },
+        voidedBy: { select: { firstName: true, lastName: true } },
         addenda: { include: { author: { select: { firstName: true, lastName: true } } }, orderBy: { createdAt: 'asc' } },
         prescriptions: true,
       },
@@ -97,10 +99,10 @@ export class EncountersService {
     return encounter;
   }
 
-  /** Exam history for the patient chart, newest first. */
+  /** Exam history for the patient chart, newest first. Voided exams are hidden. */
   async listForPatient(practiceId: string, patientId: string) {
     return this.prisma.encounter.findMany({
-      where: { practiceId, patientId },
+      where: { practiceId, patientId, status: { not: EncounterStatus.VOIDED } },
       orderBy: { createdAt: 'desc' },
       include: {
         signedBy: { select: { firstName: true, lastName: true } },
@@ -153,7 +155,7 @@ export class EncountersService {
       signedBy: { select: { firstName: true, lastName: true } },
     };
 
-    const [rows, recent, unfinished, finalized, reasonRows, impressionRows, insuranceRows] =
+    const [rows, recent, unfinished, finalized, voided, reasonRows, impressionRows, insuranceRows] =
       await this.prisma.$transaction([
         this.prisma.encounter.findMany({
           where: activeWhere,
@@ -170,14 +172,25 @@ export class EncountersService {
         this.prisma.encounter.count({
           where: this.mergeTabWhere(filters, 'finalized', recentSince),
         }),
+        this.prisma.encounter.count({
+          where: this.mergeTabWhere(filters, 'voided', recentSince),
+        }),
         this.prisma.encounter.findMany({
-          where: { practiceId, chiefComplaint: { not: null } },
+          where: {
+            practiceId,
+            chiefComplaint: { not: null },
+            status: { not: EncounterStatus.VOIDED },
+          },
           distinct: ['chiefComplaint'],
           select: { chiefComplaint: true },
           orderBy: { chiefComplaint: 'asc' },
         }),
         this.prisma.encounter.findMany({
-          where: { practiceId, assessment: { not: null } },
+          where: {
+            practiceId,
+            assessment: { not: null },
+            status: { not: EncounterStatus.VOIDED },
+          },
           distinct: ['assessment'],
           select: { assessment: true },
           orderBy: { assessment: 'asc' },
@@ -192,7 +205,7 @@ export class EncountersService {
 
     return {
       rows,
-      counts: { recent, unfinished, finalized },
+      counts: { recent, unfinished, finalized, voided },
       options: {
         reasons: reasonRows.map((r) => r.chiefComplaint!).filter(Boolean),
         impressions: impressionRows.map((r) => r.assessment!).filter(Boolean),
@@ -273,7 +286,7 @@ export class EncountersService {
    */
   private mergeTabWhere(
     filters: Prisma.EncounterWhereInput,
-    tab: 'recent' | 'unfinished' | 'finalized',
+    tab: 'recent' | 'unfinished' | 'finalized' | 'voided',
     recentSince: Date,
   ): Prisma.EncounterWhereInput {
     if (tab === 'unfinished') {
@@ -282,12 +295,18 @@ export class EncountersService {
     if (tab === 'finalized') {
       return { ...filters, status: EncounterStatus.SIGNED };
     }
+    if (tab === 'voided') {
+      return { ...filters, status: EncounterStatus.VOIDED };
+    }
 
     const existing = (filters.createdAt ?? {}) as Prisma.DateTimeFilter;
     const gte =
       existing.gte && existing.gte > recentSince ? existing.gte : recentSince;
     return {
       ...filters,
+      // "Recent" spans both working statuses, so voided exams must be
+      // excluded explicitly or they resurface in the default view.
+      status: { not: EncounterStatus.VOIDED },
       createdAt: { ...existing, gte },
     };
   }
@@ -302,6 +321,9 @@ export class EncountersService {
     const encounter = await this.getOwned(practiceId, id);
     if (encounter.status === EncounterStatus.SIGNED) {
       throw new BadRequestException('Signed encounters are immutable; add an addendum instead');
+    }
+    if (encounter.status === EncounterStatus.VOIDED) {
+      throw new BadRequestException('Voided encounters are read-only');
     }
 
     // Merge section-by-section so technicians and doctors can work on
@@ -338,6 +360,9 @@ export class EncountersService {
     if (encounter.status === EncounterStatus.SIGNED) {
       throw new BadRequestException('Encounter is already signed');
     }
+    if (encounter.status === EncounterStatus.VOIDED) {
+      throw new BadRequestException('Voided encounters cannot be signed');
+    }
 
     this.validateRequiredSections(encounter.template.sections as unknown as TemplateSection[], {
       chiefComplaint: encounter.chiefComplaint,
@@ -359,6 +384,50 @@ export class EncountersService {
       patientId: encounter.patientId,
     });
     return signed;
+  }
+
+  /**
+   * Retracts a draft exam opened in error. Nothing is deleted: the row keeps
+   * its clinical data and moves to VOIDED so it drops out of the working
+   * lists but stays available for audit. Signed encounters are legal records
+   * and are corrected with addenda instead.
+   */
+  async voidEncounter(practiceId: string, id: string, user: JwtPayload, dto: VoidEncounterDto) {
+    if (user.role !== Role.DOCTOR) {
+      throw new ForbiddenException('Only a doctor can void an encounter');
+    }
+    const reason = dto.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('A reason is required to void an encounter');
+    }
+    const encounter = await this.getOwned(practiceId, id);
+    if (encounter.status === EncounterStatus.SIGNED) {
+      throw new BadRequestException('Signed encounters cannot be voided; add an addendum instead');
+    }
+    if (encounter.status === EncounterStatus.VOIDED) {
+      throw new BadRequestException('Encounter is already voided');
+    }
+
+    const voided = await this.prisma.encounter.update({
+      where: { id },
+      data: {
+        status: EncounterStatus.VOIDED,
+        voidedById: user.sub,
+        voidedAt: new Date(),
+        voidReason: reason,
+      },
+    });
+
+    await this.audit.log({
+      practiceId,
+      actorId: user.sub,
+      action: 'DELETE',
+      entityType: 'Encounter',
+      entityId: id,
+      patientId: encounter.patientId,
+      detail: `Voided exam: ${reason}`,
+    });
+    return voided;
   }
 
   /**

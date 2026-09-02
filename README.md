@@ -2,8 +2,10 @@
 
 Electronic health records for a single-location optical practice (1–2 doctors): patient
 charts, scheduling, eye exams, spectacle and contact-lens prescriptions, insurance records,
-optical orders, recalls, inventory, customizable reports, and a full audit trail. Designed
-for HIPAA-supporting deployment on Microsoft Azure.
+optical orders, recalls, inventory, customizable reports, and a full audit trail. Store
+settings hold the practice's own catalogs — lens and contact lens pricing, frames, accepted
+insurances, billing codes, and staff accounts. Designed for HIPAA-supporting deployment on
+Microsoft Azure.
 
 ## Stack
 
@@ -20,7 +22,8 @@ for HIPAA-supporting deployment on Microsoft Azure.
 ```
 apps/api      NestJS API (auth, audit, patients, insurance, scheduling,
               encounters, prescriptions, reports, documents, orders,
-              inventory, recalls, tasks)
+              inventory, recalls, tasks, plus store settings: practice,
+              pricing, contact-lens-pricing, codes, accepted-payers, users)
 apps/web      Next.js staff web application
 infra         Bicep template for the Azure landing zone
 docs          Discovery, platform foundation, and launch documentation

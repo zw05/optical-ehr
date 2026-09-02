@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { AppointmentStatus } from '@prisma/client';
 
 export class CreateAppointmentTypeDto {
@@ -24,8 +24,15 @@ export class CreateAppointmentDto {
   @IsUUID()
   typeId!: string;
 
+  /** Required for timed bookings; ignored when walkIn is true. */
+  @IsOptional()
   @IsDateString()
-  startsAt!: string;
+  startsAt?: string;
+
+  /** Walk-in / unscheduled: creates WAITING status and skips overlap check. */
+  @IsOptional()
+  @IsBoolean()
+  walkIn?: boolean;
 
   @IsOptional()
   @IsString()
@@ -57,4 +64,21 @@ export class SetStatusDto {
   @IsOptional()
   @IsString()
   cancelReason?: string;
+}
+
+/** Query params for GET /appointments — calendar range with optional filters. */
+export class CalendarQueryDto {
+  @IsDateString()
+  from!: string;
+
+  @IsDateString()
+  to!: string;
+
+  @IsOptional()
+  @IsUUID()
+  providerId?: string;
+
+  @IsOptional()
+  @IsEnum(AppointmentStatus)
+  status?: AppointmentStatus;
 }

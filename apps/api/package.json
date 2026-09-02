@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
+    "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "prisma:migrate": "prisma migrate dev",
@@ -26,6 +27,7 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "exceljs": "^4.4.0",
     "pdfkit": "^0.15.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

@@ -14,6 +14,11 @@ export type ThemePreference =
 export type FontScale = 'sm' | 'md' | 'lg' | 'xl';
 export type Density = 'compact' | 'comfortable';
 export type FontFamilyPref = 'system' | 'serif' | 'dyslexic';
+export type SidebarMode = 'expanded' | 'rail' | 'auto';
+
+export const SIDEBAR_MIN_W = 180;
+export const SIDEBAR_MAX_W = 400;
+export const DEFAULT_SIDEBAR_W = 224;
 
 export interface UserPreferences {
   appearance: {
@@ -21,6 +26,10 @@ export interface UserPreferences {
     fontScale: FontScale;
     density: Density;
     fontFamily: FontFamilyPref;
+  };
+  sidebar: {
+    mode: SidebarMode;
+    width: number;
   };
   exam: {
     defaultTab: string;
@@ -63,6 +72,10 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     density: 'comfortable',
     fontFamily: 'system',
   },
+  sidebar: {
+    mode: 'expanded',
+    width: DEFAULT_SIDEBAR_W,
+  },
   exam: {
     defaultTab: 'hpi',
     tabOrder: [],
@@ -73,7 +86,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     autoSaveSeconds: null,
   },
   dashboard: {
-    panelOrder: ['appointments', 'orders', 'recalls'],
+    panelOrder: [
+      'patientFlow',
+      'appointments',
+      'unsignedEncounters',
+      'myTasks',
+      'orders',
+      'recalls',
+      'apptHistory',
+    ],
     hiddenPanels: [],
     landingRoute: '/dashboard',
   },
@@ -129,6 +150,16 @@ export function mergePreferences(stored: unknown): UserPreferences {
   } else {
     result.printing.copies = Math.min(5, Math.round(copies));
   }
+  const sidebarMode = result.sidebar.mode;
+  if (sidebarMode !== 'expanded' && sidebarMode !== 'rail' && sidebarMode !== 'auto') {
+    result.sidebar.mode = DEFAULT_PREFERENCES.sidebar.mode;
+  }
+  const sidebarWidth = result.sidebar.width;
+  if (typeof sidebarWidth !== 'number' || Number.isNaN(sidebarWidth)) {
+    result.sidebar.width = DEFAULT_SIDEBAR_W;
+  } else {
+    result.sidebar.width = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, Math.round(sidebarWidth)));
+  }
   return result;
 }
 
@@ -144,7 +175,12 @@ export function applyPreferencePatch(
   for (const key of SECTION_KEYS) {
     const section = patch[key];
     if (!section || typeof section !== 'object') continue;
-    Object.assign(next[key], section);
+    // Skip undefined so Nest DTO class fields do not wipe sibling keys.
+    for (const [field, value] of Object.entries(section)) {
+      if (value !== undefined) {
+        (next[key] as Record<string, unknown>)[field] = value;
+      }
+    }
   }
   return mergePreferences(next);
 }

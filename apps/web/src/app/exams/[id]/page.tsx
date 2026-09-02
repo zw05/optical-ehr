@@ -5,12 +5,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
+import { AttachedDocs } from '@/components/exam/AttachedDocs';
 import { FieldRenderer, markAllRosNegative } from '@/components/exam/FieldRenderer';
+import { IntakeHistoryPanel } from '@/components/exam/IntakeHistoryPanel';
 import { PatientBanner } from '@/components/exam/PatientBanner';
 import { TabStrip } from '@/components/TabStrip';
 import { usePreferences } from '@/components/PreferencesProvider';
 import { api, getSessionUser } from '@/lib/api';
-import { EXAM_TABS } from './examDefinition';
+import {
+  EXAM_TABS,
+  normalPatchForSection,
+  normalPatchForTab,
+  sectionHasNormals,
+  tabsWithNormals,
+} from './examDefinition';
 
 interface TemplateSection {
   key: string;
@@ -27,13 +35,15 @@ interface ProviderOption {
 
 interface EncounterDetail {
   id: string;
-  status: 'IN_PROGRESS' | 'SIGNED';
+  status: 'IN_PROGRESS' | 'SIGNED' | 'VOIDED';
   chiefComplaint: string | null;
   clinicalData: Record<string, Record<string, unknown>>;
   assessment: string | null;
   plan: string | null;
   diagnosisCodes: string[];
   signedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
   createdAt: string;
   template: { name: string; version: number; sections: TemplateSection[] };
   patient: {
@@ -41,13 +51,14 @@ interface EncounterDetail {
     mrn: string;
     firstName: string;
     lastName: string;
-    dateOfBirth: string;
+    dateOfBirth: string | null;
     phone: string | null;
     email: string | null;
     alerts: string | null;
     insurances?: { payerName: string; isVision: boolean; priority: number }[];
   };
   signedBy: { firstName: string; lastName: string; licenseNumber: string | null } | null;
+  voidedBy: { firstName: string; lastName: string } | null;
   addenda: { id: string; text: string; createdAt: string; author: { firstName: string; lastName: string } }[];
 }
 
@@ -140,6 +151,8 @@ export default function ExamPage() {
     }
   }, [examPrefs.defaultTab]);
 
+  const clinicalData = encounter?.clinicalData ?? {};
+
   const requiredTabKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const section of encounter?.template.sections ?? []) {
@@ -166,8 +179,12 @@ export default function ExamPage() {
     for (const tab of EXAM_TABS) {
       if (!seen.has(tab.key) && !hidden.has(tab.key)) result.push(tab);
     }
-    return result;
-  }, [examPrefs.hiddenTabs, examPrefs.tabOrder, requiredTabKeys]);
+    // Superseded tabs only appear on encounters that actually recorded them, so
+    // old exams stay readable without offering the old fields for new work.
+    return result.filter(
+      (tab) => !tab.legacy || Object.keys(clinicalData[tab.key] ?? {}).length > 0,
+    );
+  }, [examPrefs.hiddenTabs, examPrefs.tabOrder, requiredTabKeys, clinicalData]);
 
   useEffect(() => {
     if (!visibleTabs.some((t) => t.key === activeTab) && visibleTabs.length > 0) {
@@ -184,7 +201,9 @@ export default function ExamPage() {
     };
   }, [encounter]);
 
-  const readOnly = encounter?.status === 'SIGNED';
+  const isSigned = encounter?.status === 'SIGNED';
+  const isVoided = encounter?.status === 'VOIDED';
+  const readOnly = isSigned || isVoided;
   const encounterRef = useRef(encounter);
   encounterRef.current = encounter;
   const readOnlyRef = useRef(readOnly);
@@ -240,6 +259,33 @@ export default function ExamPage() {
         },
       };
     });
+  }
+
+  /**
+   * Fills every objective finding with its normal value in one action, so a
+   * routine exam is recorded by exception. Only blank fields are touched —
+   * anything already answered is left as the examiner recorded it.
+   */
+  function markExamNormal() {
+    setEncounter((prev) => {
+      if (!prev) return prev;
+      const nextClinical = { ...prev.clinicalData };
+      for (const tab of tabsWithNormals()) {
+        const current = { ...(nextClinical[tab.key] ?? {}) };
+        for (const [key, value] of Object.entries(normalPatchForTab(tab))) {
+          const existing = current[key];
+          const blank =
+            existing === undefined ||
+            existing === '' ||
+            (Array.isArray(existing) && existing.length === 0);
+          if (blank) current[key] = value;
+        }
+        nextClinical[tab.key] = current;
+      }
+      return { ...prev, clinicalData: nextClinical };
+    });
+    setToast('Normal findings filled in — review before signing');
+    setTimeout(() => setToast(null), 2500);
   }
 
   function setMeta(patch: Partial<ExamMeta>) {
@@ -317,6 +363,25 @@ export default function ExamPage() {
     }
   }
 
+  async function voidExam() {
+    if (!encounter) return;
+    const reason = window.prompt('Reason for voiding this exam (kept for audit):');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError('A reason is required to void an exam');
+      return;
+    }
+    setError(null);
+    try {
+      await api(`/encounters/${encounter.id}/void`, { method: 'POST', body: { reason: reason.trim() } });
+      setToast('Exam voided');
+      await load();
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Void failed');
+    }
+  }
+
   async function addAddendum() {
     if (!encounter || !addendumText.trim()) return;
     await api(`/encounters/${encounter.id}/addenda`, { method: 'POST', body: { text: addendumText } });
@@ -356,6 +421,27 @@ export default function ExamPage() {
     if (tab.stub) {
       return <p className="muted">This section is coming soon.</p>;
     }
+    // The intake questionnaire lives on the patient chart, not this encounter.
+    if (tab.key === 'history') {
+      return (
+        <IntakeHistoryPanel
+          patientId={encounter!.patient.id}
+          encounterId={encounter!.id}
+          readOnly={readOnly}
+        />
+      );
+    }
+    // Attached docs are Document rows, not clinicalData — own component.
+    if (tab.key === 'attachedDocs') {
+      return (
+        <AttachedDocs
+          encounterId={encounter!.id}
+          patientId={encounter!.patient.id}
+          readOnly={readOnly}
+          onCopyRx={(row) => setSectionField('refractionCl', 'currentRx', row)}
+        />
+      );
+    }
     return (
       <>
         {tab.key === 'ros' && !readOnly && (
@@ -374,6 +460,26 @@ export default function ExamPage() {
             {section.title && tab.key !== 'hpi' && (
               <div className="exam-section-header">
                 <h2>{section.title}</h2>
+                {!readOnly && sectionHasNormals(section) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSectionBulk(tab.key, normalPatchForSection(section))}
+                  >
+                    All normal
+                  </button>
+                )}
+              </div>
+            )}
+            {!section.title && !readOnly && sectionHasNormals(section) && (
+              <div className="toolbar">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setSectionBulk(tab.key, normalPatchForSection(section))}
+                >
+                  All normal
+                </button>
               </div>
             )}
             <div className="exam-field-grid" data-columns={fieldColumns}>
@@ -415,7 +521,9 @@ export default function ExamPage() {
               {encounter.patient.lastName}, {encounter.patient.firstName}
             </Link>{' '}
             · MRN {encounter.patient.mrn} · {encounter.template.name} v{encounter.template.version} ·{' '}
-            {readOnly ? (
+            {isVoided ? (
+              <span className="badge danger">Voided</span>
+            ) : isSigned ? (
               <span className="badge success">
                 Signed {encounter.signedAt ? new Date(encounter.signedAt).toLocaleString() : ''} by Dr.{' '}
                 {encounter.signedBy?.lastName}
@@ -425,16 +533,32 @@ export default function ExamPage() {
             )}
           </p>
           {encounter.patient.alerts && <p className="badge danger">{encounter.patient.alerts}</p>}
+          {isVoided && (
+            <p className="error-text" role="status">
+              This exam was voided
+              {encounter.voidedAt ? ` on ${new Date(encounter.voidedAt).toLocaleString()}` : ''}
+              {encounter.voidedBy ? ` by Dr. ${encounter.voidedBy.lastName}` : ''}
+              {encounter.voidReason ? ` — ${encounter.voidReason}` : ''}
+            </p>
+          )}
         </div>
         <div className="exam-actions">
           {!readOnly && (
             <>
+              <button type="button" className="secondary" onClick={markExamNormal}>
+                Normal exam
+              </button>
               <button type="button" onClick={save} disabled={saveState === 'saving'}>
                 {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : 'Save Exam'}
               </button>
               {canSign && (
                 <button type="button" className="danger" onClick={finalize}>
                   Finalize Exam
+                </button>
+              )}
+              {canSign && (
+                <button type="button" className="secondary" onClick={voidExam}>
+                  Void Exam
                 </button>
               )}
             </>

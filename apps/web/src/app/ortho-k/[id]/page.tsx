@@ -1,0 +1,370 @@
+'use client';
+
+/**
+ * One Ortho-K enrollment: the follow-up sequence in full, the visit log, and the
+ * form staff use to record a check that has happened.
+ *
+ * Exam findings live in the paper folder — this page tracks when each follow-up
+ * happened, not what was found.
+ */
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import AppShell from '@/components/AppShell';
+import BackButton from '@/components/BackButton';
+import MilestoneStrip from '@/components/orthok/MilestoneStrip';
+import { api, getSessionUser } from '@/lib/api';
+import {
+  describeDue,
+  formatDate,
+  groupVisitsByYear,
+  LOGGABLE_MILESTONES,
+  milestoneLabel,
+  ORTHO_K_STATUSES,
+  statusLabel,
+  todayInputValue,
+  type OrthoKEnrollment,
+  type OrthoKMilestone,
+  type OrthoKStatus,
+} from '@/lib/orthoK';
+
+/** Only clinical staff may retract a logged visit, matching the API's roles. */
+const MAY_DELETE_VISIT = new Set(['DOCTOR', 'TECHNICIAN', 'ADMIN']);
+
+export default function OrthoKDetailPage() {
+  const params = useParams<{ id: string }>();
+  const enrollmentId = params.id;
+  const [enrollment, setEnrollment] = useState<OrthoKEnrollment | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [user] = useState(() => (typeof window !== 'undefined' ? getSessionUser() : null));
+
+  const [visitDate, setVisitDate] = useState(todayInputValue());
+  const [milestone, setMilestone] = useState<OrthoKMilestone | ''>('');
+  const [note, setNote] = useState('');
+
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    number: '',
+    startDate: '',
+    status: '' as '' | OrthoKStatus,
+    notes: '',
+  });
+
+  const load = useCallback(async () => {
+    try {
+      const row = await api<OrthoKEnrollment>(`/ortho-k/${enrollmentId}`);
+      setEnrollment(row);
+      // Default the picker to whatever check is owed next; staff can override.
+      setMilestone((current) => current || (row.next?.milestone ?? 'INTERIM'));
+      setForm({
+        number: String(row.number),
+        startDate: row.startDate ? row.startDate.slice(0, 10) : '',
+        status: row.status,
+        notes: row.notes ?? '',
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the enrollment');
+    }
+  }, [enrollmentId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function logVisit(event: FormEvent) {
+    event.preventDefault();
+    if (!milestone) return;
+    setError(null);
+    try {
+      await api(`/ortho-k/${enrollmentId}/visits`, {
+        method: 'POST',
+        body: { milestone, visitDate, note: note.trim() || undefined },
+      });
+      setNote('');
+      setVisitDate(todayInputValue());
+      setMilestone('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to log the visit');
+    }
+  }
+
+  async function removeVisit(visitId: string) {
+    setError(null);
+    try {
+      await api(`/ortho-k/${enrollmentId}/visits/${visitId}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove the visit');
+    }
+  }
+
+  async function saveDetails(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await api(`/ortho-k/${enrollmentId}`, {
+        method: 'PATCH',
+        body: {
+          number: form.number ? Number(form.number) : undefined,
+          startDate: form.startDate || undefined,
+          status: form.status || undefined,
+          notes: form.notes,
+        },
+      });
+      setEditing(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes');
+    }
+  }
+
+  if (error && !enrollment) {
+    return (
+      <AppShell>
+        <BackButton fallbackHref="/ortho-k" />
+        <p className="error-text">{error}</p>
+      </AppShell>
+    );
+  }
+
+  if (!enrollment) {
+    return (
+      <AppShell>
+        <BackButton fallbackHref="/ortho-k" />
+        <p className="muted">Loading enrollment…</p>
+      </AppShell>
+    );
+  }
+
+  const { patient } = enrollment;
+  const canDelete = MAY_DELETE_VISIT.has(user?.role ?? '');
+  const overdue = enrollment.next?.state === 'OVERDUE';
+
+  const years = groupVisitsByYear(enrollment.visits, enrollment.startDate);
+  const currentYear = years[0];
+
+  // The strip shows only the year in progress, so it stays readable however many
+  // years of six-month checks are behind the patient. Earlier years are in the
+  // per-year sections below. Outstanding checks always belong to the current year.
+  const currentYearStart = currentYear?.startedAt ? new Date(currentYear.startedAt) : null;
+  const currentYearMilestones = enrollment.milestones.filter((m) => {
+    if (!m.visitDate) return true;
+    if (!currentYearStart) return true;
+    return new Date(m.visitDate) >= currentYearStart;
+  });
+
+  return (
+    <AppShell>
+      <BackButton fallbackHref="/ortho-k" />
+      <h1>
+        Ortho-K {enrollment.number} — {patient.lastName}, {patient.firstName}{' '}
+        <span className="badge">{statusLabel(enrollment.status)}</span>{' '}
+        <span className="badge">Year {enrollment.programYear}</span>
+      </h1>
+      <p className="muted">
+        <Link href={`/patients/${patient.id}`}>Open patient chart</Link> · {patient.mrn}
+        {patient.phone ? ` · ${patient.phone}` : ''}
+      </p>
+
+      {error && <p className="error-text">{error}</p>}
+
+      <section className="card">
+        <h2 className="ok-section-title">
+          Follow-up sequence
+          {enrollment.programYear > 1 && (
+            <span className="muted ok-section-note">Year {enrollment.programYear}</span>
+          )}
+        </h2>
+        <MilestoneStrip milestones={currentYearMilestones} visits={currentYear?.visits ?? []} />
+        <p className={`ok-next-line${overdue ? ' ok-overdue-text' : ''}`}>
+          {enrollment.startDate
+            ? describeDue(enrollment.next)
+            : 'Set the first night of wear to start the follow-up sequence.'}
+        </p>
+      </section>
+
+      <section className="card">
+        <h2 className="ok-section-title">Log a follow-up</h2>
+        {enrollment.startDate ? (
+          <form className="ok-log-form" onSubmit={logVisit}>
+            <label>
+              Visit date
+              <input
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Milestone
+              <select
+                value={milestone}
+                onChange={(e) => setMilestone(e.target.value as OrthoKMilestone)}
+                required
+              >
+                {LOGGABLE_MILESTONES.map((m) => (
+                  <option key={m} value={m}>
+                    {milestoneLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ok-log-note">
+              Note
+              <input
+                value={note}
+                placeholder="Optional — findings stay in the paper folder"
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </label>
+            <button type="submit">Record visit</button>
+          </form>
+        ) : (
+          <p className="muted">
+            No start date yet. Record the first night of lens wear in Program details below, and
+            the follow-up schedule begins from that date.
+          </p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="ok-card-head">
+          <h2 className="ok-section-title">Program details</h2>
+          <button type="button" className="secondary ok-inline-button" onClick={() => setEditing((v) => !v)}>
+            {editing ? 'Cancel' : 'Edit'}
+          </button>
+        </div>
+
+        {editing ? (
+          <form onSubmit={saveDetails}>
+            <div className="ok-enroll-grid">
+              <label>
+                Number
+                <input
+                  type="number"
+                  min={1}
+                  value={form.number}
+                  onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))}
+                />
+              </label>
+              <label>
+                First night of wear
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+                />
+                <span className="ok-hint">Changing this re-dates every follow-up.</span>
+              </label>
+              <label>
+                Status
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as OrthoKStatus }))}
+                >
+                  {ORTHO_K_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {statusLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ok-enroll-wide">
+                Notes
+                <input
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                />
+              </label>
+            </div>
+            <button type="submit">Save</button>
+          </form>
+        ) : (
+          <dl className="detail-list">
+            <div className="detail-row">
+              <dt>Number</dt>
+              <dd>{enrollment.number}</dd>
+            </div>
+            <div className="detail-row">
+              <dt>First night of wear</dt>
+              <dd className={enrollment.startDate ? undefined : 'empty'}>
+                {formatDate(enrollment.startDate)}
+              </dd>
+            </div>
+            <div className="detail-row">
+              <dt>Notes</dt>
+              <dd className={enrollment.notes ? undefined : 'empty'}>{enrollment.notes ?? '—'}</dd>
+            </div>
+          </dl>
+        )}
+      </section>
+
+      <section className="card">
+        <h2 className="ok-section-title">Visit log</h2>
+        {enrollment.visits.length === 0 ? (
+          <p className="muted">No follow-ups recorded yet.</p>
+        ) : (
+          years.map((programYear) => (
+            <details
+              key={programYear.year}
+              className="ok-year"
+              // The year in progress is what staff came to see; earlier ones stay folded.
+              open={programYear.isCurrent}
+            >
+              <summary className="ok-year-summary">
+                <span className="ok-year-name">Year {programYear.year}</span>
+                <span className="muted">
+                  {programYear.startedAt ? `from ${formatDate(programYear.startedAt)}` : 'not started'}
+                  {' · '}
+                  {programYear.visits.length} visit{programYear.visits.length === 1 ? '' : 's'}
+                </span>
+              </summary>
+              {programYear.visits.length === 0 ? (
+                <p className="muted">No visits recorded in this year yet.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Milestone</th>
+                      <th>Note</th>
+                      <th>Recorded by</th>
+                      {canDelete && <th />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {programYear.visits.map((visit) => (
+                      <tr key={visit.id}>
+                        <td>{formatDate(visit.visitDate)}</td>
+                        <td>{milestoneLabel(visit.milestone)}</td>
+                        <td className={visit.note ? undefined : 'muted'}>{visit.note ?? '—'}</td>
+                        <td className="muted">
+                          {visit.recordedBy
+                            ? `${visit.recordedBy.firstName} ${visit.recordedBy.lastName}`
+                            : '—'}
+                        </td>
+                        {canDelete && (
+                          <td>
+                            <button
+                              type="button"
+                              className="danger ok-inline-button"
+                              onClick={() => void removeVisit(visit.id)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
+          ))
+        )}
+      </section>
+    </AppShell>
+  );
+}

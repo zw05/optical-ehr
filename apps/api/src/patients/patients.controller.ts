@@ -61,6 +61,12 @@ export class PatientsController {
     return this.patients.filterOptions(user.practiceId);
   }
 
+  /** GET /api/patients/directory?take= — all active charts, most recent visit first. Must be above :id. */
+  @Get('directory')
+  directory(@CurrentUser() user: JwtPayload, @Query('take') take?: string) {
+    return this.patients.directory(user.practiceId, take ? Number(take) : undefined);
+  }
+
   /** GET /api/patients/:id — full chart header with histories, insurance, recalls. */
   @Get(':id')
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
